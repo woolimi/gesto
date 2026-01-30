@@ -1,4 +1,5 @@
 import os
+import time
 from enum import Enum
 
 import cv2
@@ -14,6 +15,10 @@ HAND_CONNECTIONS = [
     (0, 9), (9, 10), (10, 11), (11, 12), (0, 13), (13, 14), (14, 15), (15, 16),
     (0, 17), (17, 18), (18, 19), (19, 20), (5, 9), (9, 13), (13, 17),
 ]
+
+# 같은 포즈를 이만큼 유지해야 트리거 발생 (초)
+TRIGGER_HOLD_DURATION_SEC = 1.0
+
 
 class TriggerResult(str, Enum):
     NONE = "none"
@@ -91,7 +96,10 @@ def _draw_landmarks_on_frame(frame_bgr, result, motion_active: bool):
             cv2.line(frame_bgr, pts[i], pts[j], color, thickness)
 
 class PostureTriggerDetector:
-    def __init__(self):
+    def __init__(self, hold_duration_sec: float = TRIGGER_HOLD_DURATION_SEC):
+        self._hold_duration_sec = hold_duration_sec
+        self._hold_candidate: TriggerResult | None = None
+        self._hold_since: float = 0.0
         # 환경에 맞춰 config.MODELS_DIR 사용
         model_path = os.path.join(config.MODELS_DIR, "hand_landmarker.task")
         base_options = mp_tasks.BaseOptions(model_asset_path=model_path)
@@ -130,13 +138,34 @@ class PostureTriggerDetector:
             return TriggerResult.START
         return TriggerResult.NONE
 
+    def _apply_hold_duration(self, raw: TriggerResult) -> TriggerResult:
+        """동일 포즈가 hold_duration_sec 이상 유지될 때만 START/STOP 반환."""
+        if raw == TriggerResult.NONE:
+            self._hold_candidate = None
+            self._hold_since = 0.0
+            return TriggerResult.NONE
+
+        now = time.monotonic()
+        if raw != self._hold_candidate:
+            self._hold_candidate = raw
+            self._hold_since = now
+            return TriggerResult.NONE
+
+        if now - self._hold_since >= self._hold_duration_sec:
+            self._hold_candidate = None
+            self._hold_since = 0.0
+            return raw
+        return TriggerResult.NONE
+
     def process(self, frame_bgr, motion_active: bool = False) -> TriggerResult:
         result = self._detect(frame_bgr)
-        return self._result_to_trigger(result, motion_active)
+        raw = self._result_to_trigger(result, motion_active)
+        return self._apply_hold_duration(raw)
 
     def process_annotated(self, frame_bgr, motion_active: bool = False):
         result = self._detect(frame_bgr)
-        trigger = self._result_to_trigger(result, motion_active)
+        raw = self._result_to_trigger(result, motion_active)
+        trigger = self._apply_hold_duration(raw)
         annotated = frame_bgr.copy()
         _draw_landmarks_on_frame(annotated, result, motion_active)
         return trigger, annotated
