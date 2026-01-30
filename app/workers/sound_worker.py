@@ -60,6 +60,13 @@ def play_trigger_stop() -> None:
     _enqueue_play(config.ASSETS_DIR, "motion-trigger-stop.mp3")
 
 
+def play_mode_sound(mode: str) -> None:
+    """모드 전환 시 해당 모드 효과음 재생 (PPT / YOUTUBE / GAME)."""
+    mode_upper = (mode or "").upper()
+    filename = f"mode-{mode_upper.lower()}.mp3"
+    _enqueue_play(config.ASSETS_DIR, filename)
+
+
 def _enqueue_play(assets_dir: str, filename: str) -> None:
     path = os.path.join(assets_dir, filename)
     if not os.path.isfile(path):

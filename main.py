@@ -11,7 +11,13 @@ from app.main_window import MainWindow
 from app.capture import CameraWorker
 from app.mode_controller import ModeController
 from app.recognition import TriggerWorker, ModeDetectionWorker
-from app.workers import play_trigger_start, play_trigger_stop, start_playback_worker, stop_playback_worker
+from app.workers import (
+    play_trigger_start,
+    play_trigger_stop,
+    play_mode_sound,
+    start_playback_worker,
+    stop_playback_worker,
+)
 
 
 def main():
@@ -27,6 +33,7 @@ def main():
 
     # UI → Mode Controller
     window.mode_changed.connect(mode_controller.set_mode)
+    window.mode_changed.connect(play_mode_sound)  # 모드 전환 시 해당 모드 효과음 재생
     mode_controller.set_mode(window.current_mode)
     # 시작/종료 버튼 클릭 → mode_controller 경유 (상태·UI·사운드 일원화)
     window.toggle_detection_requested.connect(
