@@ -11,6 +11,7 @@ from app.main_window import MainWindow
 from app.capture import CameraWorker
 from app.mode_controller import ModeController
 from app.recognition import TriggerWorker, ModeDetectionWorker
+from app.workers import play_trigger_start, play_trigger_stop, start_playback_worker, stop_playback_worker
 
 
 def main():
@@ -27,6 +28,10 @@ def main():
     # UI → Mode Controller
     window.mode_changed.connect(mode_controller.set_mode)
     mode_controller.set_mode(window.current_mode)
+    # 시작/종료 버튼 클릭 → mode_controller 경유 (상태·UI·사운드 일원화)
+    window.toggle_detection_requested.connect(
+        lambda: mode_controller.set_detection_state(not mode_controller.get_is_detecting())
+    )
 
     # 카메라 → UI (웹캠 표시)
     def on_frame_ready(qimage):
@@ -50,6 +55,13 @@ def main():
     trigger.trigger_stop.connect(lambda: mode_controller.set_detection_state(False))
     # Mode Controller → UI (감지 상태 반영)
     mode_controller.detection_state_changed.connect(window.set_detection_state)
+    # 감지 시작/정지 시 효과음
+    def on_detection_state_changed(is_active: bool):
+        if is_active:
+            play_trigger_start()
+        else:
+            play_trigger_stop()
+    mode_controller.detection_state_changed.connect(on_detection_state_changed)
 
     # 모드별 감지 → Mode Controller (제스처 시 pynput 출력) + UI (인식된 제스처 표시)
     mode_detection.gesture_detected.connect(mode_controller.on_gesture)
@@ -61,11 +73,13 @@ def main():
 
     camera.error_occurred.connect(on_camera_error)
 
+    start_playback_worker()
     camera.start()
     trigger.start()
     mode_detection.start()
 
     def on_quit():
+        stop_playback_worker()
         camera.stop()
         trigger.stop()
         mode_detection.stop()

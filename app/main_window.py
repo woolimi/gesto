@@ -17,6 +17,8 @@ class MainWindow(QMainWindow):
     stop_detection = pyqtSignal()
     sensitivity_changed = pyqtSignal(int)
     mode_changed = pyqtSignal(str)
+    # 사용자가 시작/종료 버튼 클릭 시 (main에서 mode_controller 경유로 연결)
+    toggle_detection_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -85,7 +87,8 @@ class MainWindow(QMainWindow):
             self.stop_detection.emit()
 
     def on_toggle_clicked(self):
-        self.set_detection_state(not self.is_detecting)
+        """버튼 클릭 시 토글 요청만 시그널로 보냄. 실제 상태·사운드는 main에서 mode_controller 경유."""
+        self.toggle_detection_requested.emit()
 
     def on_sensitivity_changed(self, value: int):
         self.sensitivity = value
