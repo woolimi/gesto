@@ -7,7 +7,7 @@
 - **참조**:
   - [SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md) — 데이터 흐름, 레이어 역할, 폴더 매핑
   - [SYSTEM_REQUIREMENTS.md](SYSTEM_REQUIREMENTS.md) — 시스템 요구사항
-  - 폴더 구조: [app/](app/) (UI, capture, mode_controller, recognition, models, assets, data), [input_simulator/](input_simulator/) (Pynput)
+  - 폴더 구조: [app/](app/) (main_window, capture, mode_controller, recognition, workers, widgets, models, assets). Pynput 연동은 [app/mode_controller/](app/mode_controller/)에서 수행.
 
 ## 2. 시스템 아키텍처
 
@@ -45,8 +45,8 @@
 - **책임**:
   1. **현재 모드** 단일 소스로 유지.
   2. 실시간 루프에서 **현재 모드에 맞는 인식기**만 사용 (Game → Posture, PPT → Gesture+LSTM, YouTube → Gesture+LSTM).
-  3. 인식 결과(제스처/자세 ID 또는 액션 이름)를 **명령**으로 변환하여 **Pynput(input_simulator)**에 전달.
-- **구현 방향**: [app/mode_controller/mode_controller.py](app/mode_controller/mode_controller.py)가 단순 상태 저장을 넘어, (1) 파이프라인/앱에서 **현재 모드용 인식기**를 조회하는 진입점을 제공하거나, (2) 인식 결과 → 명령 → Pynput 호출을 **Mode Controller가 오케스트레이션**하도록 단계적으로 확장한다.
+  3. 인식 결과(제스처/자세 ID 또는 액션 이름)를 **명령**으로 변환하여 **Pynput**([app/mode_controller/](app/mode_controller/) 내)에 전달.
+- **구현 방향**: [app/mode_controller/mode_controller.py](app/mode_controller/mode_controller.py)는 (1) 현재 모드·감지 on/off 단일 소스, (2) [app/recognition/registry.py](app/recognition/registry.py)로 현재 모드용 인식기 조회, (3) [app/workers/](app/workers/) 파이프라인과 연동해 인식 결과 → 제스처명 → Pynput 키 입력을 오케스트레이션한다.
 
 ## 5. 구현 단계 (Phase) — 체크리스트
 
@@ -62,27 +62,27 @@
 
 ### Phase 2: Mode Controller 및 실시간 루프 오케스트레이션
 
-- [ ] "현재 모드 → 해당 모드 인식기 사용 → 인식 결과 → 명령 → Pynput" 실시간 루프 정립
-- [ ] [app/mode_controller/mode_controller.py](app/mode_controller/mode_controller.py) 확장
-- [ ] [app/recognition/](app/recognition/) 파이프라인이 Mode Controller에서 현재 모드 읽기
-- [ ] 파이프라인이 해당 모드용 detector/recognizer만 사용하도록 변경
-- [ ] 모드 변경 시 Game/PPT/YouTube 중 해당 인식 경로만 사용
+- [x] "현재 모드 → 해당 모드 인식기 사용 → 인식 결과 → 명령 → Pynput" 실시간 루프 정립 ([main.py](main.py) 연동)
+- [x] [app/mode_controller/mode_controller.py](app/mode_controller/mode_controller.py) — 감지 on/off, 제스처→Pynput 담당
+- [x] [app/workers/mode_detection_worker.py](app/workers/mode_detection_worker.py)가 Mode Controller에서 현재 모드 읽기 (`get_current_mode`)
+- [x] [app/recognition/registry.py](app/recognition/registry.py)로 해당 모드용 detector만 사용 (ppt/, youtube/, game/)
+- [x] 모드 변경 시 Game/PPT/YouTube 중 해당 인식 경로만 사용
 
 ### Phase 3: Mediapipe — 모드별 인식
 
-- [ ] **Game (Posture)**: [app/recognition/](app/recognition/) 내 Posture 인식 (직진/후진/좌회전/우회전)
-- [ ] **PPT (Gesture + LSTM)**: 다음/이전/쇼 시작 제스처 (규칙 기반 + LSTM 도입 시)
-- [ ] **YouTube (Gesture + LSTM)**: 재생/정지, 10초 앞/뒤, 음소거, 전체화면 (규칙 기반 + LSTM 도입 시)
-- [ ] **공통**: 트리거(시작/종료) 모션 모든 모드에서 인식
+- [ ] **Game (Posture)**: [app/recognition/game/detector.py](app/recognition/game/detector.py) — 직진/후진/좌회전/우회전
+- [ ] **PPT (Gesture + LSTM)**: [app/recognition/ppt/detector.py](app/recognition/ppt/detector.py) — 다음/이전/쇼 시작 (규칙 기반 + LSTM 도입 시)
+- [ ] **YouTube (Gesture + LSTM)**: [app/recognition/youtube/detector.py](app/recognition/youtube/detector.py) — 재생/정지, 10초 앞/뒤, 음소거, 전체화면 (규칙 기반 + LSTM 도입 시)
+- [x] **공통**: 트리거(시작/종료) — [app/recognition/trigger.py](app/recognition/trigger.py), [app/workers/trigger_worker.py](app/workers/trigger_worker.py)
 - [ ] S-06-GME-01~04: Game 직진/후진/좌회전/우회전
 - [ ] S-06-YTB-01~06: YouTube 제스처
 - [ ] S-06-PPT-01~02: PPT 다음/이전 슬라이드
 
 ### Phase 4: Pynput 연동 (명령 실행)
 
-- [ ] Mode Controller(또는 파이프라인)에서 내려준 명령을 [input_simulator/manager.py](input_simulator/manager.py), [input_simulator/actions.py](input_simulator/actions.py)로 전달
-- [ ] 키/마우스 입력 실행
-- [ ] 기존 제스처→액션 매핑(registry/action_mapper) 일관성 유지
+- [x] [app/mode_controller/mode_controller.py](app/mode_controller/mode_controller.py)에서 제스처명 → 키 매핑 후 Pynput으로 키 입력 실행 (`on_gesture`)
+- [x] [app/workers/mode_detection_worker.py](app/workers/mode_detection_worker.py)의 `gesture_detected` 시그널이 Mode Controller `on_gesture`로 전달
+- [ ] 모드별 제스처→액션 매핑([app/mode_controller/](app/mode_controller/) 내 `_build_gesture_mapping`) 확장·일관성 유지
 
 ### Phase 5: 통합 테스트 및 문서
 
