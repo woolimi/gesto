@@ -58,13 +58,14 @@ refactor: improve UI component structure
 ```
 app/
 ├── main_window.py
-├── capture/                    # 웹캠 (opencv, QThread)
-├── mode_controller/            # 모드 상태
-├── recognition/                # 인식 (Posture 트리거 등)
-├── widgets/                    # PyQT6 위젯
-├── models/                     # Hand Landmarker 등 모델
-├── assets/                     # 이미지·오디오 리소스
-└── data/                       # 데이터
+├── capture/                    # 웹캠
+├── mode_controller/            # 모드·감지 on/off, 제스처 → pynput
+├── recognition/                # 인식 (trigger, registry, ppt/youtube/game)
+├── workers/                    # QThread (트리거·모드감지·효과음)
+├── widgets/                    # PyQt6 위젯
+├── models/                     # Hand Landmarker 등
+└── assets/                     # 이미지·오디오
+
 config.py
 main.py
 ```

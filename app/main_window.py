@@ -22,7 +22,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.current_mode = "PPT"
+        self.current_mode = "GAME"
         self.sensitivity = config.SENSITIVITY_DEFAULT
         self.is_detecting = False
 
@@ -64,7 +64,7 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         central_widget.setLayout(main_layout)
 
-        self.control_panel.ppt_radio.setChecked(True)
+        self.control_panel.game_radio.setChecked(True)
 
         self.control_panel.mode_changed.connect(self.on_mode_changed)
         self.control_panel.sensitivity_changed.connect(self.on_sensitivity_changed)

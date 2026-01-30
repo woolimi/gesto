@@ -6,7 +6,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QLabel, QPushButton,
     QRadioButton, QButtonGroup, QSlider, QGroupBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent
+from PyQt6.QtGui import QKeyEvent
 
 import config
 
@@ -42,21 +43,27 @@ class ControlPanelWidget(QGroupBox):
         mode_group.setStyleSheet(f"color: {config.COLOR_TEXT_PRIMARY};")
         mode_layout = QVBoxLayout()
         self.mode_button_group = QButtonGroup()
+        self.game_radio = QRadioButton("Game 모드")
         self.ppt_radio = QRadioButton("PPT 모드")
-        self.youtube_radio = QRadioButton("유투브 모드")
-        self.game_radio = QRadioButton("게임 모드")
+        self.youtube_radio = QRadioButton("Youtube 모드")
         self.mode_button_group.addButton(self.ppt_radio, 0)
         self.mode_button_group.addButton(self.youtube_radio, 1)
         self.mode_button_group.addButton(self.game_radio, 2)
         self.ppt_radio.setStyleSheet(f"color: {config.COLOR_TEXT_PRIMARY}; font-size: 12px;")
         self.youtube_radio.setStyleSheet(f"color: {config.COLOR_TEXT_PRIMARY}; font-size: 12px;")
         self.game_radio.setStyleSheet(f"color: {config.COLOR_TEXT_PRIMARY}; font-size: 12px;")
-        self.ppt_radio.toggled.connect(lambda: self.mode_changed.emit("PPT"))
-        self.youtube_radio.toggled.connect(lambda: self.mode_changed.emit("YOUTUBE"))
-        self.game_radio.toggled.connect(lambda: self.mode_changed.emit("GAME"))
+        # 기본 선택을 GAME으로 고정 (Qt 기본값이 첫 번째 addButton일 수 있어 잘못된 모드 소리 방지)
+        self.game_radio.setChecked(True)
+        # 체크될 때만 모드 변경 시그널. 각 버튼마다 모드 문자열을 직접 전달 (sender() 혼동 방지)
+        self.ppt_radio.toggled.connect(lambda checked: self._emit_mode_if_checked(checked, "PPT"))
+        self.youtube_radio.toggled.connect(lambda checked: self._emit_mode_if_checked(checked, "YOUTUBE"))
+        self.game_radio.toggled.connect(lambda checked: self._emit_mode_if_checked(checked, "GAME"))
+        # Game 모드에서 pynput 방향키가 UI에 전달되어 라디오 선택이 바뀌지 않도록 방향키 무시
+        for radio in (self.game_radio, self.ppt_radio, self.youtube_radio):
+            radio.installEventFilter(self)
+        mode_layout.addWidget(self.game_radio)
         mode_layout.addWidget(self.ppt_radio)
         mode_layout.addWidget(self.youtube_radio)
-        mode_layout.addWidget(self.game_radio)
         mode_group.setLayout(mode_layout)
         layout.addWidget(mode_group)
 
@@ -90,6 +97,22 @@ class ControlPanelWidget(QGroupBox):
         """)
         self.toggle_button.clicked.connect(self.toggle_clicked.emit)
         layout.addWidget(self.toggle_button)
+
+    def eventFilter(self, obj, event):
+        """모드 라디오에서 방향키(↑↓←→) 무시 — Game 모드 제스처로 보낸 키가 라디오 선택을 바꾸지 않도록."""
+        if event.type() == QEvent.Type.KeyPress and isinstance(event, QKeyEvent):
+            if event.key() in (
+                Qt.Key.Key_Up, Qt.Key.Key_Down,
+                Qt.Key.Key_Left, Qt.Key.Key_Right,
+            ):
+                event.accept()
+                return True
+        return super().eventFilter(obj, event)
+
+    def _emit_mode_if_checked(self, checked: bool, mode: str) -> None:
+        """체크될 때만 해당 모드로 시그널 발생 (각 라디오에서 모드 문자열을 직접 전달)."""
+        if checked:
+            self.mode_changed.emit(mode)
 
     def set_detection_state(self, is_active: bool):
         """토글 버튼 텍스트 및 스타일 설정."""

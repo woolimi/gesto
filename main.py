@@ -11,7 +11,13 @@ from app.main_window import MainWindow
 from app.capture import CameraWorker
 from app.mode_controller import ModeController
 from app.recognition import TriggerWorker, ModeDetectionWorker
-from app.workers import play_trigger_start, play_trigger_stop, start_playback_worker, stop_playback_worker
+from app.workers import (
+    play_trigger_start,
+    play_trigger_stop,
+    play_mode_sound,
+    start_playback_worker,
+    stop_playback_worker,
+)
 
 
 def main():
@@ -27,18 +33,19 @@ def main():
 
     # UI → Mode Controller
     window.mode_changed.connect(mode_controller.set_mode)
+    window.mode_changed.connect(play_mode_sound)  # 모드 전환 시 해당 모드 효과음 재생
     mode_controller.set_mode(window.current_mode)
     # 시작/종료 버튼 클릭 → mode_controller 경유 (상태·UI·사운드 일원화)
     window.toggle_detection_requested.connect(
         lambda: mode_controller.set_detection_state(not mode_controller.get_is_detecting())
     )
 
-    # 카메라 → UI (웹캠 표시)
-    def on_frame_ready(qimage):
+    # 트리거 워커 → UI (손 랜드마크가 그려진 웹캠 표시)
+    def on_frame_annotated(qimage):
         if not qimage.isNull():
             window.update_webcam_frame(QPixmap.fromImage(qimage))
 
-    camera.frame_ready.connect(on_frame_ready)
+    trigger.frame_annotated.connect(on_frame_annotated)
 
     # 카메라 → 공통 트리거 (모션 감지 시작/종료: 양손 펴기/주먹)
     camera.frame_bgr_ready.connect(trigger.enqueue_frame)
@@ -55,6 +62,8 @@ def main():
     trigger.trigger_stop.connect(lambda: mode_controller.set_detection_state(False))
     # Mode Controller → UI (감지 상태 반영)
     mode_controller.detection_state_changed.connect(window.set_detection_state)
+    # Mode Controller → TriggerWorker (버튼으로 시작/종료 시 랜드마크 스타일 동기화)
+    mode_controller.detection_state_changed.connect(trigger.set_motion_active)
     # 감지 시작/정지 시 효과음
     def on_detection_state_changed(is_active: bool):
         if is_active:

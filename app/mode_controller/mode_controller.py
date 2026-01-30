@@ -2,6 +2,7 @@
 Mode Controller — 현재 모드·감지 on/off 단일 소스, 제스처 → pynput 출력.
 """
 
+import time
 from typing import Literal
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -22,11 +23,13 @@ class ModeController(QObject):
         self._is_detecting = False
         self._keyboard = KeyController()
         self._gesture_to_key = self._build_gesture_mapping()
+        # Game 모드: 현재 눌려 있다고 보는 키. 방향 전환 시 이전 키를 먼저 놓기 위함.
+        self._last_game_keys: set = set()
 
     def _build_gesture_mapping(self) -> dict[tuple[str, str], object]:
-        """(mode, gesture_name) -> pynput Key 또는 문자."""
+        """(mode, gesture_name) -> pynput Key 또는 문자. Game은 방향키(↑↓←→)."""
         return {
-            # PPT
+            # PPT: 다음/이전 슬라이드 (한손 주먹 + 좌/우 슬라이드)
             ("PPT", "next"): Key.right,
             ("PPT", "prev"): Key.left,
             ("PPT", "next_slide"): Key.right,
@@ -37,15 +40,15 @@ class ModeController(QObject):
             ("YOUTUBE", "backward"): Key.left,
             ("YOUTUBE", "mute"): "m",
             ("YOUTUBE", "fullscreen"): "f",
-            # Game
-            ("GAME", "forward"): "w",
-            ("GAME", "back"): "s",
-            ("GAME", "left"): "a",
-            ("GAME", "right"): "d",
-            ("GAME", "직진"): "w",
-            ("GAME", "후진"): "s",
-            ("GAME", "좌회전"): "a",
-            ("GAME", "우회전"): "d",
+            # Game: 방향키 (크롬 등에서 방향키로 동작하는 게임 제어)
+            ("GAME", "forward"): Key.up,
+            ("GAME", "back"): Key.down,
+            ("GAME", "left"): Key.left,
+            ("GAME", "right"): Key.right,
+            ("GAME", "직진"): Key.up,
+            ("GAME", "후진"): Key.down,
+            ("GAME", "좌회전"): Key.left,
+            ("GAME", "우회전"): Key.right,
         }
 
     def set_mode(self, mode: ModeName) -> None:
@@ -60,21 +63,56 @@ class ModeController(QObject):
         if self._is_detecting == is_active:
             return
         self._is_detecting = is_active
+        if not is_active and self._last_game_keys:
+            self._release_game_keys()
         self.detection_state_changed.emit(is_active)
 
     def get_is_detecting(self) -> bool:
         return self._is_detecting
 
+    def _release_game_keys(self) -> None:
+        """GAME 모드에서 현재 눌려 있다고 보는 키를 모두 release. macOS Key Sticky 방지."""
+        try:
+            for k in self._last_game_keys:
+                self._keyboard.release(k)
+        except Exception:
+            pass
+        self._last_game_keys = set()
+
     def on_gesture(self, gesture_name: str) -> None:
-        """모드별 감지(ppt/game 등)에서 인식된 제스처 시 호출. 현재 모드 기준으로 pynput 키 입력."""
-        if not gesture_name or not self._is_detecting:
+        """모드별 감지(ppt/game 등)에서 인식된 제스처 시 호출. 현재 모드 기준으로 pynput 키 입력.
+        gesture_name에 '|'가 있으면 복수 제스처(예: 'forward|right')로 해석.
+        GAME 모드: 방향이 바뀔 때만 즉시 이전 키 release 후 새 키 press (macOS Key Sticky 방지)."""
+        if not self._is_detecting:
             return
-        key = self._gesture_to_key.get((self._mode, gesture_name))
-        if key is None:
-            key = self._gesture_to_key.get((self._mode, gesture_name.lower()))
-        if key is not None:
+        names = [s.strip() for s in (gesture_name or "").split("|") if s.strip()]
+        keys = []
+        for name in names:
+            key = self._gesture_to_key.get((self._mode, name))
+            if key is None:
+                key = self._gesture_to_key.get((self._mode, name.lower()))
+            if key is not None:
+                keys.append(key)
+
+        if self._mode == "GAME":
+            keys_set = set(keys)
+            if keys_set != self._last_game_keys:
+                self._release_game_keys()
+                if keys_set:
+                    try:
+                        for k in keys_set:
+                            self._keyboard.press(k)
+                        self._last_game_keys = keys_set
+                    except Exception:
+                        pass
+            return
+
+        if keys:
             try:
-                self._keyboard.press(key)
-                self._keyboard.release(key)
+                for k in keys:
+                    self._keyboard.press(k)
+                time.sleep(0.04)
+                for k in keys:
+                    self._keyboard.release(k)
             except Exception:
                 pass

@@ -8,6 +8,7 @@ from app.workers.sound_worker import (
     SoundPlaybackWorker,
     play_trigger_start,
     play_trigger_stop,
+    play_mode_sound,
     start_playback_worker,
     stop_playback_worker,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "SoundPlaybackWorker",
     "play_trigger_start",
     "play_trigger_stop",
+    "play_mode_sound",
     "start_playback_worker",
     "stop_playback_worker",
 ]
