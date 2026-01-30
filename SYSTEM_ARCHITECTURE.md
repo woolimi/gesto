@@ -48,5 +48,5 @@ flowchart TB
 | PyQT (UI) | `src/app/` |
 | Capture (opencv) | `src/capture/` |
 | Mode Controller | `src/mode_controller/` |
-| Mediapipe (인식) | `src/mediapipe/` |
+| Mediapipe (인식) | `app/recognition/` |
 | Pynput (OS 입력) | `src/input_simulator/` |

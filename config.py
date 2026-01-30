@@ -2,15 +2,18 @@
 Gesto 프로젝트 설정 파일
 """
 
+import os
+
 # 애플리케이션 정보
 APP_NAME = "Gesto"
 APP_VERSION = "1.0.0"
 APP_DESCRIPTION = "Hands-Free Presentation Control"
 
-# 경로 설정
-ASSETS_DIR = "assets"
-MODELS_DIR = "models"
-DATA_DIR = "data"
+# 경로 설정 (app/ 하위)
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+ASSETS_DIR = os.path.join(_ROOT, "app", "assets")
+MODELS_DIR = os.path.join(_ROOT, "app", "models")
+DATA_DIR = os.path.join(_ROOT, "app", "data")
 
 # 웹캠 설정
 CAMERA_INDEX = 0

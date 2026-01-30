@@ -7,46 +7,70 @@
 - **참조**:
   - [SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md) — 데이터 흐름, 레이어 역할, 폴더 매핑
   - [SYSTEM_REQUIREMENTS.md](SYSTEM_REQUIREMENTS.md) — 시스템 요구사항
-  - 폴더 구조: [src/app](src/app), [src/capture](src/capture), [src/mode_controller](src/mode_controller), [src/mediapipe](src/mediapipe), [src/input_simulator](src/input_simulator)
+  - 폴더 구조: [app/](app/) (UI, capture, mode_controller, recognition, models, assets, data), [input_simulator/](input_simulator/) (Pynput)
 
 ## 2. 시스템 아키텍처
 
 - **상세 내용은 [SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md) 참조.** (다이어그램, 레이어 역할, 폴더 매핑이 해당 문서에 정의됨.)
 - **요약**: Mode Controller가 현재 모드에 따라 해당 모드 인식기를 선택하고, 인식 결과를 Pynput에 명령으로 전달한다. 이미지는 opencv에서 **바로 Mediapipe**로 전달하며, YOLO는 범위에서 제외한다.
 
-## 3. Mode Controller 역할 (핵심)
+## 3. 상세 요구사항 (DNT)
+
+| DNT ID | Description | G & P | 동작 |
+|--------|-------------|-------|------|
+| DNT-01 | 사용자는 데스크탑에서 프로그램을 실행/종료할 수 있다. | Gesture, Posture | 실행 : Hotkey, 종료 : Hotkey |
+| DNT-02 | 사용자는 트리거 동작을 통해 모션인식의 시작과 종료를 제어 가능 | — | — |
+| DNT-02-TRIG-01 | 트리거 동작 시작 모션을 하면 모션인식이 시작된다. | Gesture | 시작: 양손 펴기 |
+| DNT-02-TRIG-02 | 트리거 동작 정지 모션을 하면 모션인식이 정지된다. | Gesture | 종료: 양 주먹 |
+| DNT-03 | 사용자는 모션인식 시작과 종료를 확인 할 수 있어야 한다. | — | — |
+| DNT-04 | 사용자는 자신의 모습을 볼 수 있어야 한다. | — | — |
+| DNT-05 | 사용자는 자신이 선택한 모드를 볼 수 있어야 한다. | — | — |
+| DNT-06 | 사용자는 각각의 모드를 동작으로 제어가 가능해야한다. | — | — |
+| DNT-06-GME-01 | Game - 동작으로 직진이 가능해야한다. | Gesture | 검지만 위 방향으로 향할 시 |
+| DNT-06-GME-02 | Game - 동작으로 후진이 가능해야한다. | Gesture | 검지만 아래 방향으로 향할 시 |
+| DNT-06-GME-03 | Game - 동작으로 좌회전이 가능해야한다. | Gesture | 검지만 왼쪽 방향으로 향할 시 |
+| DNT-06-GME-04 | Game - 동작으로 우회전이 가능해야한다. | Gesture | 검지만 오른쪽 방향으로 향할 시 |
+| DNT-06-YTB-01 | Youtube - 동작으로 10초 빨리감기가 가능해야한다. | Gesture | 한손주먹 + 오른쪽으로 슬라이드 |
+| DNT-06-YTB-02 | Youtube - 동작으로 10초 뒤로감기가 가능해야한다. | Gesture | 한손주먹 + 왼쪽으로 슬라이드 |
+| DNT-06-YTB-03 | Youtube - 동작으로 재생이 가능해야한다. | Gesture | 한손주먹 + 손바닥 보이기 |
+| DNT-06-YTB-04 | Youtube - 동작으로 정지가 가능해야한다. | Gesture | 한손주먹 + 손바닥 보이기 |
+| DNT-06-YTB-05 | Youtube - 동작으로 음소거 토글이 가능해야한다. | Gesture | 한손주먹 + 쉿 포즈 |
+| DNT-06-YTB-06 | Youtube - 동작으로 전체화면 토글이 가능해야한다. | Gesture | 한손주먹 + 손가락 움켜졌다 펴기 |
+| DNT-06-PPT-01 | PPT - 동작으로 다음 슬라이드로 이동해야한다. | Gesture | 한손주먹 + 오른쪽으로 슬라이드 |
+| DNT-06-PPT-02 | PPT - 동작으로 이전 슬라이드로 이동해야한다. | Gesture | 한손주먹 + 왼쪽으로 슬라이드 |
+
+## 4. Mode Controller 역할 (핵심)
 
 - **입력**: UI에서의 모드 변경(`set_mode`)만. (YOLO/인물 영역은 현재 범위에서 제외.)
 - **책임**:
   1. **현재 모드** 단일 소스로 유지.
   2. 실시간 루프에서 **현재 모드에 맞는 인식기**만 사용 (Game → Posture, PPT → Gesture+LSTM, YouTube → Gesture+LSTM).
   3. 인식 결과(제스처/자세 ID 또는 액션 이름)를 **명령**으로 변환하여 **Pynput(input_simulator)**에 전달.
-- **구현 방향**: [src/mode_controller/mode_controller.py](src/mode_controller/mode_controller.py)가 단순 상태 저장을 넘어, (1) 파이프라인/앱에서 **현재 모드용 인식기**를 조회하는 진입점을 제공하거나, (2) 인식 결과 → 명령 → Pynput 호출을 **Mode Controller가 오케스트레이션**하도록 단계적으로 확장한다.
+- **구현 방향**: [app/mode_controller/mode_controller.py](app/mode_controller/mode_controller.py)가 단순 상태 저장을 넘어, (1) 파이프라인/앱에서 **현재 모드용 인식기**를 조회하는 진입점을 제공하거나, (2) 인식 결과 → 명령 → Pynput 호출을 **Mode Controller가 오케스트레이션**하도록 단계적으로 확장한다.
 
-## 4. 구현 단계 (Phase) — 체크리스트
+## 5. 구현 단계 (Phase) — 체크리스트
 
 ### Phase 1: Capture 및 PyQT UI
 
-- [ ] 웹캠(opencv) 확보 — [src/capture/camera.py](src/capture/camera.py)
-- [ ] UI에서 모드 선택·시작/종료·감도 표시 — [src/app/main_window.py](src/app/main_window.py), [src/app/gesture_display.py](src/app/gesture_display.py)
-- [ ] UI 이벤트가 Mode Controller에 모드 전달 (`set_mode(mode)` 수신)
-- [ ] S-01: 프로그램 실행/종료
-- [ ] S-04: 자신 모습 표시 (웹캠 영상)
-- [ ] S-05: 선택 모드 표시
-- [ ] S-02/S-02-TRIG-01/S-02-TRIG-02: 트리거 시작/종료 모션
-- [ ] S-03: 모션인식 시작·종료 확인
+- [x] 웹캠(opencv) 확보 — [app/capture/camera.py](app/capture/camera.py) (QThread 사용)
+- [x] UI에서 모드 선택·시작/종료·감도 표시 — [app/main_window.py](app/main_window.py), [app/widgets/gesture_display.py](app/widgets/gesture_display.py)
+- [x] UI 이벤트가 Mode Controller에 모드 전달 (`set_mode(mode)` 수신)
+- [x] S-04: 자신 모습 표시 (웹캠 영상)
+- [x] S-05: 선택 모드 표시
+- [x] S-02/S-02-TRIG-01/S-02-TRIG-02: 트리거 시작/종료 모션 (MediaPipe Posture: 양손 펴기=시작, 양손 주먹=정지)
+- [x] S-03: 모션인식 시작·종료 확인
 
 ### Phase 2: Mode Controller 및 실시간 루프 오케스트레이션
 
 - [ ] "현재 모드 → 해당 모드 인식기 사용 → 인식 결과 → 명령 → Pynput" 실시간 루프 정립
-- [ ] [src/mode_controller/mode_controller.py](src/mode_controller/mode_controller.py) 확장
-- [ ] [src/mediapipe/pipeline.py](src/mediapipe/pipeline.py)가 Mode Controller에서 현재 모드 읽기
+- [ ] [app/mode_controller/mode_controller.py](app/mode_controller/mode_controller.py) 확장
+- [ ] [app/recognition/](app/recognition/) 파이프라인이 Mode Controller에서 현재 모드 읽기
 - [ ] 파이프라인이 해당 모드용 detector/recognizer만 사용하도록 변경
 - [ ] 모드 변경 시 Game/PPT/YouTube 중 해당 인식 경로만 사용
 
 ### Phase 3: Mediapipe — 모드별 인식
 
-- [ ] **Game (Posture)**: [src/mediapipe/](src/mediapipe/) 내 Posture 인식 (직진/후진/좌회전/우회전)
+- [ ] **Game (Posture)**: [app/recognition/](app/recognition/) 내 Posture 인식 (직진/후진/좌회전/우회전)
 - [ ] **PPT (Gesture + LSTM)**: 다음/이전/쇼 시작 제스처 (규칙 기반 + LSTM 도입 시)
 - [ ] **YouTube (Gesture + LSTM)**: 재생/정지, 10초 앞/뒤, 음소거, 전체화면 (규칙 기반 + LSTM 도입 시)
 - [ ] **공통**: 트리거(시작/종료) 모션 모든 모드에서 인식
@@ -56,7 +80,7 @@
 
 ### Phase 4: Pynput 연동 (명령 실행)
 
-- [ ] Mode Controller(또는 파이프라인)에서 내려준 명령을 [src/input_simulator/manager.py](src/input_simulator/manager.py), [src/input_simulator/actions.py](src/input_simulator/actions.py)로 전달
+- [ ] Mode Controller(또는 파이프라인)에서 내려준 명령을 [input_simulator/manager.py](input_simulator/manager.py), [input_simulator/actions.py](input_simulator/actions.py)로 전달
 - [ ] 키/마우스 입력 실행
 - [ ] 기존 제스처→액션 매핑(registry/action_mapper) 일관성 유지
 
@@ -65,9 +89,3 @@
 - [ ] 통합 테스트: 모드 전환 → 해당 모드 인식만 동작 → Pynput 명령 실행 E2E
 - [ ] README에 아키텍처·Mode Controller 역할 반영
 - [ ] [GESTURE_GUIDE.md](GESTURE_GUIDE.md) 등 문서에 아키텍처·Mode Controller 역할 반영
-
-## 5. 기존 계획과의 차이
-
-- **제거**: 1~7일차 일정형 체크리스트, "초기 단계" 등 과거 상태 설명.
-- **유지**: 현재 디렉터리 구조(app, capture, mode_controller, mediapipe, input_simulator), config, requirements, SYSTEM_REQUIREMENTS 매핑.
-- **추가/강조**: 아키텍처 다이어그램(SYSTEM_ARCHITECTURE.md), Mode Controller의 "현재 모드 → 모드별 모델 선택 → 실시간 인식 → Pynput 명령" 역할, Phase 단위 구현 순서. **YOLO는 범위에서 제외하며, 이미지는 opencv에서 바로 Mediapipe로 전달.**

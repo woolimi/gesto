@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/gesto-light.png" alt="Gesto Logo" width="200"/>
+  <img src="app/assets/gesto-light.png" alt="Gesto Logo" width="200"/>
 </div>
 
 # Gesto
@@ -56,24 +56,17 @@ refactor: improve UI component structure
 ## 프로젝트 구조
 
 ```
-src/
-├── app/                        # PyQT UI
-│   ├── main_window.py
-│   └── gesture_display.py
-├── capture/                    # 비디오 (opencv)
-│   └── camera.py
+app/
+├── main_window.py
+├── capture/                    # 웹캠 (opencv, QThread)
 ├── mode_controller/            # 모드 상태
-│   └── mode_controller.py
-├── mediapipe/                  # 인식 (handler, detector, pipeline, gestures, registry, recognizers)
-│   ├── handler.py
-│   ├── detector.py
-│   ├── pipeline.py
-│   ├── gestures.py
-│   ├── registry.py
-│   └── recognizers.py
-└── input_simulator/            # OS 입력 (Pynput)
-    ├── manager.py
-    └── actions.py
+├── recognition/                # 인식 (Posture 트리거 등)
+├── widgets/                    # PyQT6 위젯
+├── models/                     # Hand Landmarker 등 모델
+├── assets/                     # 이미지·오디오 리소스
+└── data/                       # 데이터
+config.py
+main.py
 ```
 
 ## 제스처 등록 및 인식 방법

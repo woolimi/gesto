@@ -29,14 +29,16 @@ Gesto는 웹캠과 제스처만으로 PPT와 유투브를 제어하는 핸즈프
 
 ```
 gesto/
-├── src/                    # 소스 코드
-│   ├── gesture/           # 제스처 인식 모듈
-│   ├── control/           # 제어 로직 모듈
-│   ├── ui/                # PyQT6 UI 모듈
-│   └── utils/             # 유틸리티 함수
-├── models/                # 학습된 LSTM 모델
-├── data/                  # 학습 데이터
-├── assets/                # 이미지 및 리소스
+├── app/                    # 애플리케이션 코드
+│   ├── capture/           # 웹캠 캡처
+│   ├── mode_controller/   # 모드 컨트롤
+│   ├── recognition/       # 인식 (Posture 트리거 등)
+│   ├── widgets/           # PyQT6 위젯
+│   ├── models/            # Hand Landmarker 등 모델
+│   ├── assets/            # 이미지·오디오 리소스
+│   └── data/              # 데이터
+├── config.py
+├── main.py
 └── tests/                 # 테스트 코드
 ```
 
@@ -93,7 +95,7 @@ gesto/
 
 - 시퀀스 데이터를 입력으로 받는 LSTM 모델 사용
 - 제스처 시퀀스 학습 및 분류
-- 모델 파일은 `models/` 디렉토리에 저장
+- 모델 파일은 `app/models/` 디렉토리에 저장
 
 ## UI 구현 (PyQT6)
 
