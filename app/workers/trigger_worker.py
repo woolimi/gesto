@@ -30,6 +30,10 @@ class TriggerWorker(QThread):
         except queue.Full:
             pass
 
+    def set_motion_active(self, active: bool):
+        """버튼 등으로 감지 상태가 바뀔 때 호출. 랜드마크 색(파랑/회색) 동기화용."""
+        self._motion_active = active
+
     def run(self):
         while self._running:
             try:

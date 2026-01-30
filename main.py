@@ -62,6 +62,8 @@ def main():
     trigger.trigger_stop.connect(lambda: mode_controller.set_detection_state(False))
     # Mode Controller → UI (감지 상태 반영)
     mode_controller.detection_state_changed.connect(window.set_detection_state)
+    # Mode Controller → TriggerWorker (버튼으로 시작/종료 시 랜드마크 스타일 동기화)
+    mode_controller.detection_state_changed.connect(trigger.set_motion_active)
     # 감지 시작/정지 시 효과음
     def on_detection_state_changed(is_active: bool):
         if is_active:

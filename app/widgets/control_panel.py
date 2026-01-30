@@ -6,7 +6,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QLabel, QPushButton,
     QRadioButton, QButtonGroup, QSlider, QGroupBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent
+from PyQt6.QtGui import QKeyEvent
 
 import config
 
@@ -57,6 +58,9 @@ class ControlPanelWidget(QGroupBox):
         self.ppt_radio.toggled.connect(lambda checked: self._emit_mode_if_checked(checked, "PPT"))
         self.youtube_radio.toggled.connect(lambda checked: self._emit_mode_if_checked(checked, "YOUTUBE"))
         self.game_radio.toggled.connect(lambda checked: self._emit_mode_if_checked(checked, "GAME"))
+        # Game 모드에서 pynput 방향키가 UI에 전달되어 라디오 선택이 바뀌지 않도록 방향키 무시
+        for radio in (self.game_radio, self.ppt_radio, self.youtube_radio):
+            radio.installEventFilter(self)
         mode_layout.addWidget(self.game_radio)
         mode_layout.addWidget(self.ppt_radio)
         mode_layout.addWidget(self.youtube_radio)
@@ -93,6 +97,17 @@ class ControlPanelWidget(QGroupBox):
         """)
         self.toggle_button.clicked.connect(self.toggle_clicked.emit)
         layout.addWidget(self.toggle_button)
+
+    def eventFilter(self, obj, event):
+        """모드 라디오에서 방향키(↑↓←→) 무시 — Game 모드 제스처로 보낸 키가 라디오 선택을 바꾸지 않도록."""
+        if event.type() == QEvent.Type.KeyPress and isinstance(event, QKeyEvent):
+            if event.key() in (
+                Qt.Key.Key_Up, Qt.Key.Key_Down,
+                Qt.Key.Key_Left, Qt.Key.Key_Right,
+            ):
+                event.accept()
+                return True
+        return super().eventFilter(obj, event)
 
     def _emit_mode_if_checked(self, checked: bool, mode: str) -> None:
         """체크될 때만 해당 모드로 시그널 발생 (각 라디오에서 모드 문자열을 직접 전달)."""

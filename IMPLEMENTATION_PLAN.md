@@ -70,13 +70,13 @@
 
 ### Phase 3: Mediapipe — 모드별 인식
 
-- [ ] **Game (Posture)**: [app/recognition/game/detector.py](app/recognition/game/detector.py) — 직진/후진/좌회전/우회전
-- [ ] **PPT (Gesture + LSTM)**: [app/recognition/ppt/detector.py](app/recognition/ppt/detector.py) — 다음/이전/쇼 시작 (규칙 기반 + LSTM 도입 시)
+- [x] **Game (Posture)**: [app/recognition/game/detector.py](app/recognition/game/detector.py) — 직진/후진/좌회전/우회전 (방향키, 양손·동시 2방향, 검지 포인팅)
+- [x] **PPT (Gesture + LSTM)**: [app/recognition/ppt/detector.py](app/recognition/ppt/detector.py) — 다음/이전 슬라이드 (규칙 기반: 한손 주먹 + 좌/우 슬라이드)
 - [ ] **YouTube (Gesture + LSTM)**: [app/recognition/youtube/detector.py](app/recognition/youtube/detector.py) — 재생/정지, 10초 앞/뒤, 음소거, 전체화면 (규칙 기반 + LSTM 도입 시)
 - [x] **공통**: 트리거(시작/종료) — [app/recognition/trigger.py](app/recognition/trigger.py), [app/workers/trigger_worker.py](app/workers/trigger_worker.py)
-- [ ] S-06-GME-01~04: Game 직진/후진/좌회전/우회전
+- [x] S-06-GME-01~04: Game 직진/후진/좌회전/우회전
 - [ ] S-06-YTB-01~06: YouTube 제스처
-- [ ] S-06-PPT-01~02: PPT 다음/이전 슬라이드
+- [x] S-06-PPT-01~02: PPT 다음/이전 슬라이드
 
 ### Phase 4: Pynput 연동 (명령 실행)
 
