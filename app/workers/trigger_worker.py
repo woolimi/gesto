@@ -4,6 +4,7 @@
 
 import queue
 from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtGui import QImage
 
 from app.recognition.trigger import PostureTriggerDetector, TriggerResult
 
@@ -13,12 +14,14 @@ class TriggerWorker(QThread):
 
     trigger_start = pyqtSignal()
     trigger_stop = pyqtSignal()
+    frame_annotated = pyqtSignal(object)  # QImage — 손 랜드마크가 그려진 프레임
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._detector = PostureTriggerDetector()
         self._frame_queue = queue.Queue(maxsize=2)
         self._running = True
+        self._motion_active = False  # 모션 인식 중이면 True (종료 제스처만 판단)
 
     def enqueue_frame(self, frame_bgr):
         """메인/카메라 스레드에서 호출. 프레임을 큐에 넣음."""
@@ -35,11 +38,17 @@ class TriggerWorker(QThread):
                 continue
             if frame is None:
                 break
-            result = self._detector.process(frame)
+            result, annotated = self._detector.process_annotated(frame, motion_active=self._motion_active)
             if result == TriggerResult.START:
                 self.trigger_start.emit()
+                self._motion_active = True
             elif result == TriggerResult.STOP:
                 self.trigger_stop.emit()
+                self._motion_active = False
+            h, w, ch = annotated.shape
+            bytes_per_line = ch * w
+            qimage = QImage(annotated.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
+            self.frame_annotated.emit(qimage.copy())
         self._detector.close()
 
     def stop(self):

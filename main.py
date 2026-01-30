@@ -33,12 +33,12 @@ def main():
         lambda: mode_controller.set_detection_state(not mode_controller.get_is_detecting())
     )
 
-    # 카메라 → UI (웹캠 표시)
-    def on_frame_ready(qimage):
+    # 트리거 워커 → UI (손 랜드마크가 그려진 웹캠 표시)
+    def on_frame_annotated(qimage):
         if not qimage.isNull():
             window.update_webcam_frame(QPixmap.fromImage(qimage))
 
-    camera.frame_ready.connect(on_frame_ready)
+    trigger.frame_annotated.connect(on_frame_annotated)
 
     # 카메라 → 공통 트리거 (모션 감지 시작/종료: 양손 펴기/주먹)
     camera.frame_bgr_ready.connect(trigger.enqueue_frame)

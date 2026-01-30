@@ -36,6 +36,7 @@ class CameraWorker(QThread):
             ret, frame = self._cap.read()
             if not ret:
                 continue
+            frame = cv2.flip(frame, 1)  # 좌우 반전 (거울 모드)
             h, w, ch = frame.shape
             bytes_per_line = ch * w
             qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
