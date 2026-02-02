@@ -8,18 +8,21 @@ class ScenarioManager:
         self.current_index = 0
         self.total_scenarios = 0
         self.gesture_name = ""
+        # 지원하는 제스처 목록 정의
+        self.SUPPORTED_GESTURES = ["Swipe_Left", "Swipe_Right", "Pinch_In", "Pinch_Out"]
 
     def generate_scenarios(self, gesture_name):
         """
         Generates scenarios for a given gesture name.
-        Currently supports 'Swipe_Left' and 'Swipe_Right' with the 144-step logic.
+        Currently supports 'Swipe_Left', 'Swipe_Right', 'Pinch_In', 'Pinch_Out' with the 144-step logic.
         """
         self.gesture_name = gesture_name
         self.scenarios = []
         self.current_index = 0
         
         # Common Logic for Swipe Gestures
-        if gesture_name in ["Swipe_Left", "Swipe_Right", "Pinch_In", "Pinch_Out"]:
+        if gesture_name in self.SUPPORTED_GESTURES:
+
             distances = [70, 140, 200]
             hands = ["Right", "Left"]
             speeds = ["Normal", "Slow", "Fast"] # 보통, 느림, 빠름

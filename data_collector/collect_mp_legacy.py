@@ -467,13 +467,14 @@ class LegacyCollector(QMainWindow):
                 return
             
             # 지원되는 제스처인지 확인
-            supported_gestures = ["Swipe_Left", "Swipe_Right"]
+            supported_gestures = self.scenario_manager.SUPPORTED_GESTURES
             if gesture_name not in supported_gestures:
                 QMessageBox.warning(self, "입력 오류", f"시나리오 모드에서 지원되지 않는 제스처입니다.\n지원 목록: {', '.join(supported_gestures)}\n정확히 입력해주세요.")
                 return
 
             # 지원되는 제스처인지 확인 (ScenarioManager가 0개를 반환하면 경고)
             # 여기서는 일단 진행하고 아래에서 total_scenarios == 0일 때 처리함
+
             
         self.target_episodes = self.episode_count_input.value()
 
