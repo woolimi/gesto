@@ -7,12 +7,36 @@ import mediapipe as mp
 import shutil
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QLineEdit, QComboBox, 
-                             QPushButton, QMessageBox, QSpinBox, QSlider, QGroupBox, QFormLayout)
+                             QPushButton, QMessageBox, QSpinBox, QSlider, QGroupBox, QFormLayout, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread
 from PyQt6.QtGui import QImage, QPixmap
 
 # Ensure the project root is in the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# 시나리오 매니저 임포트
+try:
+    from data_collector.scenario_definitions import ScenarioManager
+except ImportError:
+    # data_collector 디렉토리 내부에서 실행 시 폴백
+    from scenario_definitions import ScenarioManager
+
+# 폰트 설정
+from PIL import ImageFont, ImageDraw, Image
+# 한글 폰트 찾기 시도
+FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc" 
+# 위 경로에 없을 경우 대체 경로 탐색
+if not os.path.exists(FONT_PATH):
+    possible_fonts = [
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+    ]
+    for p in possible_fonts:
+        if os.path.exists(p):
+            FONT_PATH = p
+            break
+
+
 
 class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
@@ -21,7 +45,7 @@ class VideoThread(QThread):
         super().__init__()
         self._run_flag = True
         self.cap = cv2.VideoCapture(0)
-        # Attempt to set FPS
+        # FPS 설정 시도
         self.cap.set(cv2.CAP_PROP_FPS, 30)
 
     def set_camera_property(self, prop_id, value):
@@ -33,11 +57,11 @@ class VideoThread(QThread):
             start_time = time.time()
             ret, cv_img = self.cap.read()
             if ret:
-                # Mirror the image
+                # 거울 모드 (좌우 반전)
                 cv_img = cv2.flip(cv_img, 1)
                 self.change_pixmap_signal.emit(cv_img)
             
-            # Maintain 30 FPS
+            # 30 FPS 유지
             elapsed = time.time() - start_time
             delay = max(0.001, 0.033 - elapsed)
             time.sleep(delay)
@@ -46,6 +70,7 @@ class VideoThread(QThread):
         self._run_flag = False
         self.wait()
         self.cap.release()
+
 
 class LegacyCollector(QMainWindow):
     def __init__(self):
@@ -73,6 +98,13 @@ class LegacyCollector(QMainWindow):
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["Gesture", "Posture"])
         controls_layout.addWidget(self.mode_combo)
+
+        # Scenario Mode Checkbox
+        self.scenario_mode_cb = QCheckBox("Scenario Mode")
+        self.scenario_mode_cb.setChecked(False)
+        self.scenario_mode_cb.stateChanged.connect(self.toggle_scenario_mode)
+        controls_layout.addWidget(self.scenario_mode_cb)
+
 
         # Episode Count Input
         self.episode_count_input = QSpinBox()
@@ -180,6 +212,10 @@ class LegacyCollector(QMainWindow):
         self.recorded_files = [] # Stack for valid multi-undo
         self.last_saved_file = None
         
+        # Scenario Manager
+        self.scenario_manager = ScenarioManager()
+        self.is_scenario_mode = False
+        
         # Video Thread
         self.thread = VideoThread()
         self.thread.change_pixmap_signal.connect(self.update_image)
@@ -218,37 +254,73 @@ class LegacyCollector(QMainWindow):
         self.thread.set_camera_property(cv2.CAP_PROP_GAIN, value)
 
     def delete_last_recording(self):
+        """
+        마지막 녹화 파일 삭제 및 상태 복구
+        ('z' 키 입력 시 호출)
+        """
         if self.recorded_files:
             file_to_delete = self.recorded_files.pop()
             if os.path.exists(file_to_delete):
                 try:
                     os.remove(file_to_delete)
-                    # Decrement episode count
-                    if self.current_episode > 0:
-                        self.current_episode -= 1
                     
-                    self.status_label.setText(f"Deleted: {os.path.basename(file_to_delete)}. Resume Ep {self.current_episode + 1}")
+                    # 시나리오 모드일 경우 단계 뒤로 가기
+                    if self.is_scenario_mode:
+                        if self.scenario_manager.prev():
+                            self.current_episode -= 1 # Legacy 변수 동기화
+                            self.status_label.setText(f"삭제됨: {os.path.basename(file_to_delete)}. 이전 단계로 복귀: {self.scenario_manager.get_current_step()['display_text']}")
+                        else:
+                            self.status_label.setText(f"삭제됨: {os.path.basename(file_to_delete)}. (첫 단계입니다)")
+                    else:
+                        # 일반 모드
+                        if self.current_episode > 0:
+                            self.current_episode -= 1
+                        self.status_label.setText(f"삭제됨: {os.path.basename(file_to_delete)}. 에피소드 {self.current_episode + 1} 재개")
+
                     self.last_saved_file = self.recorded_files[-1] if self.recorded_files else None
-                    
                 except Exception as e:
-                    self.status_label.setText(f"Error deleting: {e}")
-                    # Push back if failed? Or just leave it. 
-                    # If file doesn't exist, we just removed it from stack, which is correct sync.
+                    self.status_label.setText(f"삭제 오류: {e}")
             else:
-                self.status_label.setText(f"File not found: {os.path.basename(file_to_delete)}")
+                self.status_label.setText(f"파일을 찾을 수 없음: {os.path.basename(file_to_delete)}")
                 
         elif self.last_saved_file and os.path.exists(self.last_saved_file):
-             # Fallback for simple single delete if stack is empty (e.g. restart)
+             # 스택이 비어있을 경우 (재시작 직후 등) 마지막 저장 파일 삭제 시도
             try:
                 os.remove(self.last_saved_file)
-                self.status_label.setText(f"Deleted: {os.path.basename(self.last_saved_file)}")
+                self.status_label.setText(f"삭제됨: {os.path.basename(self.last_saved_file)}")
                 self.last_saved_file = None
-                if self.current_episode > 0:
+                
+                if self.is_scenario_mode:
+                     if self.scenario_manager.prev():
+                         self.current_episode -= 1
+                elif self.current_episode > 0:
                         self.current_episode -= 1
             except Exception as e:
-                self.status_label.setText(f"Error deleting: {e}")
+                self.status_label.setText(f"삭제 오류: {e}")
         else:
-            self.status_label.setText("No recent file to delete.")
+            self.status_label.setText("삭제할 최근 파일이 없습니다.")
+
+
+    def toggle_scenario_mode(self, state):
+        self.is_scenario_mode = (state == Qt.CheckState.Checked.value or state == 2)
+        if self.is_scenario_mode:
+            self.status_label.setText("Scenario Mode Enabled. Enter Gesture Name (e.g. Swipe_Left) and Start.")
+            self.episode_count_input.setEnabled(False) # Controlled by scenario
+        else:
+            self.episode_count_input.setEnabled(True)
+            self.status_label.setText("Scenario Mode Disabled.")
+
+    def put_text_korean(self, img, text, position, font_size, color):
+        img_pil = Image.fromarray(img)
+        draw = ImageDraw.Draw(img_pil)
+        try:
+            font = ImageFont.truetype(FONT_PATH, font_size)
+        except Exception:
+            font = ImageFont.load_default()
+        
+        draw.text(position, text, font=font, fill=color)
+        return np.array(img_pil)
+
 
     def update_image(self, cv_img):
         # Process with MediaPipe in the main loop to keep sync
@@ -320,6 +392,25 @@ class LegacyCollector(QMainWindow):
                 if len(self.recording_frames) >= self.total_frames:
                     self.stop_recording()
 
+            # --- SCENARIO OVERLAY ---
+            if self.is_scenario_mode and not self.is_recording:
+                # HUD 배경 그리기
+                cv2.rectangle(cv_img, (0, 0), (cv_img.shape[1], 100), (0, 0, 0), -1)
+                
+                # 진행률 표시
+                prog_text = self.scenario_manager.get_progress_text()
+                inst_text = self.scenario_manager.get_instruction_text()
+                
+                # 한글 텍스트 그리기 (폰트 크기 축소)
+                cv_img = self.put_text_korean(cv_img, prog_text, (20, 15), 16, (200, 200, 200)) # Size 20 -> 16
+                cv_img = self.put_text_korean(cv_img, inst_text, (20, 45), 32, (0, 255, 0))     # Size 40 -> 32
+                
+                status = "REC" if self.is_recording else "READY"
+                cv_img = self.put_text_korean(cv_img, status, (cv_img.shape[1]-100, 30), 24, (255, 0, 0)) # Size 30 -> 24
+            # ------------------------
+
+
+
         except Exception as e:
             print(f"Error in MediaPipe process: {e}")
         
@@ -351,6 +442,16 @@ class LegacyCollector(QMainWindow):
         self.toggle_inputs(False)
         
         self.start_countdown()
+        
+        # Initialize Scenario if in Scenario Mode
+        if self.is_scenario_mode:
+             self.scenario_manager.generate_scenarios(gesture_name)
+             if self.scenario_manager.total_scenarios == 0:
+                 QMessageBox.warning(self, "Warning", f"No scenario definition found for '{gesture_name}'. Defaulting to manual.")
+                 self.is_scenario_mode = False
+             else:
+                 self.target_episodes = self.scenario_manager.total_scenarios
+
         
     def toggle_inputs(self, enabled):
         self.gesture_name_input.setEnabled(enabled)
@@ -392,7 +493,13 @@ class LegacyCollector(QMainWindow):
         os.makedirs(base_dir, exist_ok=True)
         
         timestamp = int(time.time() * 1000)
-        filename = f"{gesture_name}_{timestamp}.npy"
+        
+        if self.is_scenario_mode:
+             # Use Scenario Filename
+             filename = self.scenario_manager.get_filename()
+        else:
+             filename = f"{gesture_name}_{timestamp}.npy"
+        
         filepath = os.path.join(base_dir, filename)
         
         # Save as (Frames, 21, 3)
@@ -406,7 +513,20 @@ class LegacyCollector(QMainWindow):
             self.status_label.setText(f"Saved: {filename}")
             
             # Check for Auto-Loop
-            if self.current_episode < self.target_episodes:
+            if self.is_scenario_mode:
+                # Scenario Mode Logic
+                if self.scenario_manager.next():
+                    self.current_episode += 1 # Just to track total count for legacy var
+                    # Auto start next
+                    self.status_label.setText(f"Next: {self.scenario_manager.get_instruction_text()}")
+                    QTimer.singleShot(1000, self.start_countdown) # 1 sec delay before countdown
+                else:
+                    self.start_btn.setEnabled(True)
+                    self.toggle_inputs(True)
+                    self.status_label.setText("All Scenarios Completed!")
+                    QMessageBox.information(self, "Done", "All Scenarios Completed!")
+            
+            elif self.current_episode < self.target_episodes:
                 # Restart Countdown
                 self.start_countdown()
             else:

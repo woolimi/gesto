@@ -7,14 +7,14 @@ from tensorflow.keras.utils import to_categorical
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 
-# Paths
+# 경로 설정
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data_collector', 'data'))
 LEGACY_DATA_DIR = os.path.join(DATA_DIR, 'legacy')
 TASKS_DATA_DIR = os.path.join(DATA_DIR, 'tasks')
 MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'models'))
 
-# Parameters
-SEQUENCE_LENGTH = 45 # 1.5s * 30fps
+# 하이퍼파라미터
+SEQUENCE_LENGTH = 45 # 1.5초 * 30fps
 LANDMARKS_COUNT = 21
 COORDS_COUNT = 3
 INPUT_SHAPE = (SEQUENCE_LENGTH, LANDMARKS_COUNT * COORDS_COUNT)
@@ -23,9 +23,9 @@ BATCH_SIZE = 16
 
 def load_data(data_dir):
     """
-    Loads data from a specific directory (legacy or tasks).
-    Structure: data_dir/<Mode>/<GestureName>/*.npy
-    We will ignore Mode for now and just look at GestureName.
+    특정 디렉토리(legacy 또는 tasks)에서 데이터를 로드합니다.
+    구조: data_dir/<Mode>/<GestureName>/*.npy
+    Mode는 무시하고 GestureName을 레이블로 사용합니다.
     """
     X = []
     y = []
@@ -33,14 +33,13 @@ def load_data(data_dir):
     label_map = {}
     
     if not os.path.exists(data_dir):
-        print(f"Warning: Directory {data_dir} does not exist.")
+        print(f"경고: 디렉토리 {data_dir}가 존재하지 않습니다.")
         return np.array(X), np.array(y), label_map
 
-    # Walk through all subdirectories to find gesture folders
-    # Assuming data_dir/Gesture/GestureName or data_dir/Posture/GestureName
-    # Let's just traverse everything and find the bottom-level folders
+    # 모든 하위 디렉토리를 순회하여 제스처 폴더 찾기
+    # data_dir/Gesture/GestureName 또는 data_dir/Posture/GestureName 가정
     
-    # Actually, let's look for known modes 'Gesture' and 'Posture'
+    # 알려진 모드 'Gesture'와 'Posture' 탐색
     modes = ['Gesture', 'Posture']
     
     current_label_id = 0
@@ -63,23 +62,23 @@ def load_data(data_dir):
             
             label_id = label_map[gesture]
             
-            # Load all .npy files
+            # 모든 .npy 파일 로드
             for file in os.listdir(gesture_path):
                 if file.endswith('.npy'):
                     file_path = os.path.join(gesture_path, file)
                     try:
                         data = np.load(file_path)
-                        # Data shape is (Frames, 21, 3)
-                        # We need to ensure it has SEQUENCE_LENGTH frames.
-                        # If less, pad. If more, truncate.
+                        # 데이터 모양은 (Frames, 21, 3)
+                        # SEQUENCE_LENGTH 프레임을 갖도록 보장해야 함.
+                        # 부족하면 패딩, 넘치면 자름.
                         if data.shape[0] > SEQUENCE_LENGTH:
                              data = data[:SEQUENCE_LENGTH]
                         elif data.shape[0] < SEQUENCE_LENGTH:
-                            # Pad with zeros
+                            # 0으로 패딩
                             padding = np.zeros((SEQUENCE_LENGTH - data.shape[0], 21, 3))
                             data = np.vstack((data, padding))
                         
-                        # Flatten landmarks: (45, 21, 3) -> (45, 63)
+                        # 랜드마크 평탄화: (45, 21, 3) -> (45, 63)
                         data_flat = data.reshape(SEQUENCE_LENGTH, -1)
                         
                         X.append(data_flat)
@@ -102,10 +101,10 @@ def create_model(num_classes):
 
 def train_model(X, y, save_path, model_name):
     if len(X) == 0:
-        print(f"No data found for {model_name}. Skipping training.")
+        print(f"{model_name}에 대한 데이터가 없어 학습을 건너뜁니다.")
         return None, None
 
-    # One-hot encode labels
+    # 레이블 원-핫 인코딩
     num_classes = len(np.unique(y))
     y_encoded = to_categorical(y, num_classes=num_classes)
     
@@ -113,11 +112,11 @@ def train_model(X, y, save_path, model_name):
     
     model = create_model(num_classes)
     
-    print(f"Starting training for {model_name}...")
+    print(f"{model_name} 학습 시작...")
     history = model.fit(X_train, y_train, epochs=EPOCHS, batch_size=BATCH_SIZE, validation_data=(X_test, y_test))
     
     model.save(save_path)
-    print(f"Saved {model_name} to {save_path}")
+    print(f"{model_name} 저장 완료: {save_path}")
     return history, model
 
 def plot_comparison(history_legacy, history_tasks):
@@ -155,13 +154,13 @@ def plot_comparison(history_legacy, history_tasks):
 def main():
     os.makedirs(MODELS_DIR, exist_ok=True)
     
-    print("Loading Legacy Data...")
+    print("Legacy 데이터 로딩 중...")
     X_legacy, y_legacy, label_map_legacy = load_data(LEGACY_DATA_DIR)
-    print(f"Legacy Data: {X_legacy.shape}, Classes: {label_map_legacy}")
+    print(f"Legacy 데이터: {X_legacy.shape}, 클래스: {label_map_legacy}")
     
-    print("Loading Tasks Data...")
+    print("Tasks 데이터 로딩 중...")
     X_tasks, y_tasks, label_map_tasks = load_data(TASKS_DATA_DIR)
-    print(f"Tasks Data: {X_tasks.shape}, Classes: {label_map_tasks}")
+    print(f"Tasks 데이터: {X_tasks.shape}, 클래스: {label_map_tasks}")
     
     # Train Legacy
     history_legacy = None
