@@ -60,8 +60,6 @@ def _dist(a, b, landmarks) -> float:
 _FIST_MAX_EXTEND = 0.13
 # 검지 포인팅으로 인정할 검지 최소 연장 (이 이상 펴져 있어야 포인팅)
 _INDEX_POINT_MIN_EXTEND = 0.14
-
-
 def _is_index_pointing_gesture(landmarks, hand_scale: float) -> bool:
     """
     검지로 방향을 가리키는 자세인지 판별.
@@ -95,6 +93,14 @@ def _is_index_pointing_gesture(landmarks, hand_scale: float) -> bool:
     )
 
 
+def _is_index_really_pointing_down(landmarks) -> bool:
+    """
+    검지가 실제로 아래를 가리키는지 판별 (주먹과 구분).
+    아래 = 손목보다 검지 끝(TIP)이 아래에 있어야 함. y축: 아래일수록 큼.
+    """
+    return landmarks[INDEX_TIP].y > landmarks[WRIST].y
+
+
 def _index_angle_deg(landmarks) -> Optional[float]:
     """검지 방향 각도(degree). PIP→TIP 벡터 기준. None이면 유효하지 않음."""
     dx = landmarks[INDEX_TIP].x - landmarks[INDEX_PIP].x
@@ -119,17 +125,6 @@ def _angle_to_direction(angle_deg: float) -> Optional[str]:
     if angle_deg >= _ANGLE_LEFT_LOW or angle_deg < -_ANGLE_LEFT_LOW:
         return "left"
     return None
-
-
-def _direction_from_hand(landmarks) -> Optional[str]:
-    """한 손 랜드마크에서 유효한 '검지 포인팅'이면 방향 반환, 아니면 None."""
-    scale = _hand_size(landmarks)
-    if not _is_index_pointing_gesture(landmarks, scale):
-        return None
-    angle = _index_angle_deg(landmarks)
-    if angle is None:
-        return None
-    return _angle_to_direction(angle)
 
 
 def _normalize_angle(deg: float) -> float:
@@ -221,6 +216,9 @@ class GameDetector:
                     self._angle_ema[hand_key] + (1.0 - _ANGLE_EMA_ALPHA) * diff
                 )
             d = _angle_to_direction(self._angle_ema[hand_key])
+            # back(검지 아래)은 주먹과 구분: TIP이 PIP보다 충분히 아래에 있을 때만 인정
+            if d == "back" and not _is_index_really_pointing_down(hand_landmarks):
+                d = None
             if d is not None and d not in directions:
                 directions.append(d)
                 if len(directions) >= 2:
