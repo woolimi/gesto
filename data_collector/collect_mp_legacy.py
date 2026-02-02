@@ -23,19 +23,32 @@ except ImportError:
 
 # 폰트 설정
 from PIL import ImageFont, ImageDraw, Image
-# 한글 폰트 찾기 시도
-FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc" 
-# 위 경로에 없을 경우 대체 경로 탐색
-if not os.path.exists(FONT_PATH):
-    possible_fonts = [
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-    ]
-    for p in possible_fonts:
-        if os.path.exists(p):
-            FONT_PATH = p
-            break
 
+if sys.platform == "darwin":
+    # macOS: 한글 폰트 경로 (순서대로 탐색)
+    FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"
+    if not os.path.exists(FONT_PATH):
+        FONT_PATH = "/System/Library/Fonts/Apple SD Gothic Neo.ttc"
+    if not os.path.exists(FONT_PATH):
+        FONT_PATH = "/Library/Fonts/AppleGothic.ttf"
+    if not os.path.exists(FONT_PATH):
+        FONT_PATH = "/System/Library/Fonts/Hiragino Sans GB.ttc"
+    if not os.path.exists(FONT_PATH):
+        FONT_PATH = os.path.expanduser("~/Library/Fonts/NotoSansCJK-Regular.ttc")
+    if not os.path.exists(FONT_PATH):
+        FONT_PATH = os.path.expanduser("~/Library/Fonts/NanumGothic.ttf")
+    FONT_SIZE_SCALE = 1.5  # 맥·Retina에서 글씨 크게
+elif sys.platform == "linux":
+    # Ubuntu 등 Linux: 한글 폰트 경로 (순서대로 탐색)
+    FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
+    if not os.path.exists(FONT_PATH):
+        FONT_PATH = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
+    if not os.path.exists(FONT_PATH):
+        FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+    FONT_SIZE_SCALE = 1.5  # 우분투에서도 글씨 크게
+else:
+    FONT_PATH = ""
+    FONT_SIZE_SCALE = 1.0
 
 
 class VideoThread(QThread):
@@ -328,11 +341,14 @@ class LegacyCollector(QMainWindow):
     def put_text_korean(self, img, text, position, font_size, color):
         img_pil = Image.fromarray(img)
         draw = ImageDraw.Draw(img_pil)
+        size = int(font_size * FONT_SIZE_SCALE)
         try:
-            font = ImageFont.truetype(FONT_PATH, font_size)
+            if FONT_PATH and os.path.exists(FONT_PATH):
+                font = ImageFont.truetype(FONT_PATH, size)
+            else:
+                font = ImageFont.load_default()
         except Exception:
             font = ImageFont.load_default()
-        
         draw.text(position, text, font=font, fill=color)
         return np.array(img_pil)
 
@@ -381,13 +397,13 @@ class LegacyCollector(QMainWindow):
             
             # Draw Text
             if not self.is_recording:
-                # Top Left Corner Background for text
+                # Top Left Corner Background for text (맥/우분투 모두 FONT_SIZE_SCALE로 크게)
                 cv2.rectangle(cv_img, (0, 0), (350, 100), (0, 0, 0), -1)
-                
-                # Only show info if NOT recording. 
-                # During recording, we want clean interface.
-                cv2.putText(cv_img, status_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
-                cv2.putText(cv_img, episode_text, (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+                scale_s, scale_e = 1.2 * FONT_SIZE_SCALE, 1.0 * FONT_SIZE_SCALE
+                thick_s = max(2, int(3 * FONT_SIZE_SCALE))
+                thick_e = max(2, int(2 * FONT_SIZE_SCALE))
+                cv2.putText(cv_img, status_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, scale_s, color, thick_s)
+                cv2.putText(cv_img, episode_text, (10, 85), cv2.FONT_HERSHEY_SIMPLEX, scale_e, (255, 255, 255), thick_e)
             # ---------------
 
             # Recording Logic inside the loop to ensure we capture processed frame data
