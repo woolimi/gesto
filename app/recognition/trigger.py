@@ -28,10 +28,10 @@ class TriggerResult(str, Enum):
 # 랜드마크 인덱스 정의
 WRIST = 0
 THUMB_TIP = 4
-INDEX_MCP, INDEX_TIP = 5, 8
-MIDDLE_MCP, MIDDLE_TIP = 9, 12
-RING_MCP, RING_TIP = 13, 16
-PINKY_MCP, PINKY_TIP = 17, 20
+INDEX_MCP, INDEX_PIP, INDEX_TIP = 5, 6, 8
+MIDDLE_MCP, MIDDLE_PIP, MIDDLE_TIP = 9, 10, 12
+RING_MCP, RING_PIP, RING_TIP = 13, 14, 16
+PINKY_MCP, PINKY_PIP, PINKY_TIP = 17, 18, 20
 FINGER_TIPS = (THUMB_TIP, INDEX_TIP, MIDDLE_TIP, RING_TIP, PINKY_TIP)
 
 
@@ -60,18 +60,21 @@ def _get_hand_state(landmarks):
 
     # 2. 손가락 펴짐 여부 확인 (MCP와 TIP의 Y좌표 비교)
     # 팁(TIP)이 뿌리(MCP)보다 위에(y값이 작게) 있으면 펴진 것으로 간주
-    fingers = [INDEX_TIP, MIDDLE_TIP, RING_TIP, PINKY_TIP]
+    fingers_tip = [INDEX_TIP, MIDDLE_TIP, RING_TIP, PINKY_TIP]
     mcps = [INDEX_MCP, MIDDLE_MCP, RING_MCP, PINKY_MCP]
-    
-    is_open_list = [landmarks[tip].y < landmarks[mcp].y for tip, mcp in zip(fingers, mcps)]
+    pips = [INDEX_PIP, MIDDLE_PIP, RING_PIP, PINKY_PIP]
+
+    is_open_list = [landmarks[tip].y < landmarks[mcp].y for tip, mcp in zip(fingers_tip, mcps)]
     open_count = sum(is_open_list)
 
     # 보 (모든 손가락이 펴짐)
     if open_count >= 4:
         return "OPEN"
-    # 주먹 (모든 손가락이 MCP보다 아래로 내려감)
+    # 주먹: 모든 손가락이 접혀 있고, PIP가 TIP보다 위에 있어야 함 (손바닥이 보이도록)
     if open_count == 0:
-        return "FIST"
+        pip_above_tip = all(landmarks[pip].y < landmarks[tip].y for pip, tip in zip(pips, fingers_tip))
+        if pip_above_tip:
+            return "FIST"
     
     return "IGNORE"
 
