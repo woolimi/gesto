@@ -104,6 +104,21 @@ class LegacyCollector(QMainWindow):
         self.scenario_mode_cb.setChecked(False)
         self.scenario_mode_cb.stateChanged.connect(self.toggle_scenario_mode)
         controls_layout.addWidget(self.scenario_mode_cb)
+        
+        # User Name Input (New)
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("User Name (e.g. Kyle)")
+        self.username_input.setFixedWidth(120)
+        controls_layout.addWidget(self.username_input)
+        
+        # Countdown Config (New)
+        self.countdown_spin = QSpinBox()
+        self.countdown_spin.setRange(0, 30)
+        self.countdown_spin.setValue(5)
+        self.countdown_spin.setPrefix("Wait: ")
+        self.countdown_spin.setSuffix(" s")
+        controls_layout.addWidget(self.countdown_spin)
+
 
 
         # Episode Count Input
@@ -199,7 +214,7 @@ class LegacyCollector(QMainWindow):
         self.recording_frames = []
         self.countdown_timer = QTimer()
         self.countdown_timer.timeout.connect(self.update_countdown)
-        self.countdown_val = 3
+        self.countdown_val = 5 # 3초 -> 5초로 변경 (요청사항)
         self.record_duration = 1.5
         self.fps = 30
         self.total_frames = int(self.record_duration * self.fps)
@@ -393,20 +408,29 @@ class LegacyCollector(QMainWindow):
                     self.stop_recording()
 
             # --- SCENARIO OVERLAY ---
+            # 시나리오 모드일 때 HUD 그리기 (녹화 중이 아닐 때)
             if self.is_scenario_mode and not self.is_recording:
-                # HUD 배경 그리기
+                # 1. 배경
                 cv2.rectangle(cv_img, (0, 0), (cv_img.shape[1], 100), (0, 0, 0), -1)
                 
-                # 진행률 표시
+                # 2. 텍스트 정보 가져오기
                 prog_text = self.scenario_manager.get_progress_text()
                 inst_text = self.scenario_manager.get_instruction_text()
                 
-                # 한글 텍스트 그리기 (폰트 크기 축소)
-                cv_img = self.put_text_korean(cv_img, prog_text, (20, 15), 16, (200, 200, 200)) # Size 20 -> 16
-                cv_img = self.put_text_korean(cv_img, inst_text, (20, 45), 32, (0, 255, 0))     # Size 40 -> 32
+                # 3. 텍스트 그리기 (폰트 크기 조정됨)
+                cv_img = self.put_text_korean(cv_img, prog_text, (20, 15), 16, (200, 200, 200)) 
+                cv_img = self.put_text_korean(cv_img, inst_text, (20, 45), 32, (0, 255, 0))     
                 
                 status = "REC" if self.is_recording else "READY"
-                cv_img = self.put_text_korean(cv_img, status, (cv_img.shape[1]-100, 30), 24, (255, 0, 0)) # Size 30 -> 24
+                # 카운트다운 중이면 카운트다운 표시
+                if self.countdown_timer.isActive():
+                    # 중앙에 큰 글씨로 카운트다운
+                    h, w, c = cv_img.shape
+                    # 대략적인 중앙 위치
+                    cv_img = self.put_text_korean(cv_img, str(self.countdown_val), (w//2 - 50, h//2 - 50), 100, (255, 255, 0))
+                    status = f"COUNT: {self.countdown_val}"
+
+                cv_img = self.put_text_korean(cv_img, status, (cv_img.shape[1]-150, 30), 24, (255, 0, 0)) 
             # ------------------------
 
 
@@ -428,11 +452,32 @@ class LegacyCollector(QMainWindow):
 
     def start_recording_sequence(self):
         gesture_name = self.gesture_name_input.text().strip()
+        username = self.username_input.text().strip()
+        
+        # 1. 제스처 이름 검증
         if not gesture_name:
-            QMessageBox.warning(self, "Input Error", "Please enter a gesture name.")
+            QMessageBox.warning(self, "입력 오류", "제스처 이름을 입력해주세요 (예: Swipe_Left).")
             return
+
+        # 2. 시나리오 모드 검증
+        if self.is_scenario_mode:
+            # 사용자 이름(ID) 필수 검증
+            if not username:
+                QMessageBox.warning(self, "입력 오류", "사용자 이름(ID)을 입력해주세요.\n데이터 병합 시 충돌 방지를 위해 필요합니다.")
+                return
+            
+            # 지원되는 제스처인지 확인
+            supported_gestures = ["Swipe_Left", "Swipe_Right"]
+            if gesture_name not in supported_gestures:
+                QMessageBox.warning(self, "입력 오류", f"시나리오 모드에서 지원되지 않는 제스처입니다.\n지원 목록: {', '.join(supported_gestures)}\n정확히 입력해주세요.")
+                return
+
+            # 지원되는 제스처인지 확인 (ScenarioManager가 0개를 반환하면 경고)
+            # 여기서는 일단 진행하고 아래에서 total_scenarios == 0일 때 처리함
             
         self.target_episodes = self.episode_count_input.value()
+
+
         self.current_episode = 0
         self.recorded_files = [] # Clear stack on new run
         
@@ -458,11 +503,15 @@ class LegacyCollector(QMainWindow):
         self.episode_count_input.setEnabled(enabled)
         self.mode_combo.setEnabled(enabled)
         self.camera_group.setEnabled(enabled) # Optional: disable camera controls during recording
+        # User and Countdown should be disabled during recording
+        self.username_input.setEnabled(enabled)
+        self.countdown_spin.setEnabled(enabled)
 
     def start_countdown(self):
-        self.countdown_val = 3
+        self.countdown_val = self.countdown_spin.value() # UI 값 사용
         self.status_label.setText(f"Episode {self.current_episode + 1}/{self.target_episodes}: Starting in {self.countdown_val}...")
         self.countdown_timer.start(1000)
+
 
     def update_countdown(self):
         self.countdown_val -= 1
@@ -494,13 +543,18 @@ class LegacyCollector(QMainWindow):
         
         timestamp = int(time.time() * 1000)
         
+        username = self.username_input.text().strip()
+        
         if self.is_scenario_mode:
-             # Use Scenario Filename
-             filename = self.scenario_manager.get_filename()
+             # Use Scenario Filename (w/ Username)
+             filename = self.scenario_manager.get_filename(username=username)
         else:
-             filename = f"{gesture_name}_{timestamp}.npy"
+             # Legacy Filename Logic + Username
+             user_suffix = f"_{username}" if username else ""
+             filename = f"{gesture_name}_{timestamp}{user_suffix}.npy"
         
         filepath = os.path.join(base_dir, filename)
+
         
         # Save as (Frames, 21, 3)
         data_To_save = np.array(self.recording_frames, dtype=np.float32)
