@@ -19,7 +19,7 @@ class ScenarioManager:
         self.current_index = 0
         
         # Common Logic for Swipe Gestures
-        if gesture_name in ["Swipe_Left", "Swipe_Right"]:
+        if gesture_name in ["Swipe_Left", "Swipe_Right", "Pinch_In", "Pinch_Out"]:
             distances = [70, 140, 200]
             hands = ["Right", "Left"]
             speeds = ["Normal", "Slow", "Fast"] # 보통, 느림, 빠름
