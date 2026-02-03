@@ -81,7 +81,7 @@ class ModeController(QObject):
             pass
         self._last_game_keys = set()
 
-    def on_gesture(self, gesture_name: str) -> None:
+    def on_gesture(self, gesture_name: str, _cooldown_until: float = 0.0) -> None:
         """모드별 감지(ppt/game 등)에서 인식된 제스처 시 호출. 현재 모드 기준으로 pynput 키 입력.
         gesture_name에 '|'가 있으면 복수 제스처(예: 'forward|right')로 해석.
         GAME 모드: 방향이 바뀔 때만 즉시 이전 키 release 후 새 키 press (macOS Key Sticky 방지)."""

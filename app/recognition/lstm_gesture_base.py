@@ -27,10 +27,6 @@ INPUT_SHAPE = (SEQUENCE_LENGTH, LANDMARKS_COUNT * COORDS_COUNT)
 # 클래스 순서: load_data에서 Gesture 폴더 알파벳 순 → Pinch_In, Pinch_Out, Swipe_Left, Swipe_Right
 LSTM_GESTURE_CLASSES = ["Pinch_In", "Pinch_Out", "Swipe_Left", "Swipe_Right"]
 
-# 추론 옵션
-CONFIDENCE_THRESHOLD = 0.5
-COOLDOWN_SEC = 0.6
-
 
 def _normalize_landmarks(data: np.ndarray) -> np.ndarray:
     """
@@ -52,12 +48,20 @@ class LstmGestureBase:
 
     def __init__(
         self,
-        confidence_threshold: float = CONFIDENCE_THRESHOLD,
-        cooldown_sec: float = COOLDOWN_SEC,
+        cooldown_sec: float,
         get_confidence_threshold: Optional[Callable[[], float]] = None,
+        confidence_threshold: Optional[float] = None,
     ):
-        self._confidence_threshold = confidence_threshold
-        self._get_confidence_threshold = get_confidence_threshold  # 감도 실시간 반영용
+        # 민감도 통일: getter 없으면 config 기본 감도 → threshold 사용
+        self._get_confidence_threshold = get_confidence_threshold
+        if get_confidence_threshold is None:
+            self._confidence_threshold = (
+                confidence_threshold
+                if confidence_threshold is not None
+                else config.sensitivity_to_confidence_threshold(config.SENSITIVITY_DEFAULT)
+            )
+        else:
+            self._confidence_threshold = 0.5  # getter 사용 시 미사용
         self._cooldown_sec = cooldown_sec
         self._cooldown_until = 0.0
         self._buffer: deque = deque(maxlen=SEQUENCE_LENGTH)
@@ -83,6 +87,11 @@ class LstmGestureBase:
         InterpreterClass = self._get_tflite_interpreter_class()
         self._interpreter: Any = InterpreterClass(model_path=tflite_path)
         self._interpreter.allocate_tensors()
+
+    @property
+    def cooldown_until(self) -> float:
+        """쿨다운 종료 시각 (time.monotonic()). UI와 시작/종료 시각 공유용."""
+        return self._cooldown_until
 
     def _get_tflite_interpreter_class(self):
         """tflite_runtime(우분투) 또는 tensorflow.lite(맥/우분투) 반환."""

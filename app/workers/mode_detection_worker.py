@@ -17,7 +17,7 @@ from app.recognition.registry import get_mode_detector
 class ModeDetectionWorker(QThread):
     """모션 감지 중일 때만 프레임을 받아, 현재 모드 감지기로 제스처/자세 판별. gesture_detected 시그널."""
 
-    gesture_detected = pyqtSignal(str)
+    gesture_detected = pyqtSignal(str, float)  # (gesture_name, cooldown_until_monotonic)
 
     def __init__(
         self,
@@ -75,7 +75,10 @@ class ModeDetectionWorker(QThread):
             if self._detector is not None:
                 gesture = self._detector.process(frame)
                 # GAME 모드: 빈 제스처도 emit하여 방향 해제(release) 가능하도록 함
-                self.gesture_detected.emit(gesture or "")
+                cooldown_until = (
+                    getattr(self._detector, "cooldown_until", 0.0) if gesture else 0.0
+                )
+                self.gesture_detected.emit(gesture or "", cooldown_until)
         if self._detector is not None:
             self._detector.close()
             self._detector = None

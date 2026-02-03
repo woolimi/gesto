@@ -117,9 +117,13 @@ class MainWindow(QMainWindow):
                 if self.webcam_panel.webcam_label.text():
                     self.webcam_panel.webcam_label.setText("")
 
-    def update_gesture(self, gesture_name: str):
-        """인식된 제스처 표시 (백엔드 연결 시 사용)."""
+    def update_gesture(self, gesture_name: str, cooldown_until: float = 0.0):
+        """인식된 제스처 표시. cooldown_until(monotonic)이 있으면 그 시각에 라벨 초기화."""
         if self.is_detecting:
-            self.webcam_panel.gesture_display.update_status("감지 중", gesture_name)
+            self.webcam_panel.gesture_display.update_status(
+                "감지 중",
+                gesture_name,
+                clear_at_monotonic=cooldown_until if cooldown_until > 0 else None,
+            )
         else:
             self.webcam_panel.gesture_display.update_status("대기 중", gesture_name)

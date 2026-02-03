@@ -24,7 +24,9 @@ CAMERA_FPS = 30
 # 제스처 인식 설정
 GESTURE_DETECTION_FPS = 30
 GESTURE_SEQUENCE_LENGTH = 30  # LSTM 입력 시퀀스 길이
-GESTURE_CONFIDENCE_THRESHOLD = 0.7  # 기본 신뢰도 임계값
+# 모드별 쿨다운(초). 제스처 인식 후 이 시간 동안 새 제스처 인식 안 함
+PPT_COOLDOWN_SEC = 2.0
+YOUTUBE_COOLDOWN_SEC = 2.0
 
 # 감도 설정 (0-100). UI 감도 → LSTM confidence threshold 매핑 (재훈련 불필요)
 SENSITIVITY_DEFAULT = 50
