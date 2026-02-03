@@ -1,5 +1,5 @@
-# Ubuntu (Linux) 전용
-# 설치: pip install -r requirements.txt
+# macOS (Apple Silicon / Intel) 전용
+# 설치: pip install -r requirements-macos.txt
 
 absl-py==2.3.1
 astunparse==1.6.3
@@ -49,6 +49,11 @@ PyGetWindow==0.0.9
 Pygments==2.19.2
 PyMsgBox==2.0.1
 pynput==1.8.1
+pyobjc-core==12.1
+pyobjc-framework-ApplicationServices==12.1
+pyobjc-framework-Cocoa==12.1
+pyobjc-framework-CoreText==12.1
+pyobjc-framework-Quartz==12.1
 pyparsing==3.3.2
 pyperclip==1.11.0
 PyQt6==6.10.2
@@ -62,15 +67,17 @@ requests==2.32.5
 requests-oauthlib==2.0.0
 rich==14.3.1
 rsa==4.9.1
+rubicon-objc==0.5.3
 scikit-learn==1.7.2
 scipy==1.15.3
 six==1.17.0
 sounddevice==0.5.5
 tensorboard==2.15.2
 tensorboard-data-server==0.7.2
-tensorflow==2.15.0
 tensorflow-estimator==2.15.0
 tensorflow-io-gcs-filesystem==0.37.1
+tensorflow-macos==2.15.0
+tensorflow-metal==1.2.0
 termcolor==3.3.0
 threadpoolctl==3.6.0
 typing_extensions==4.15.0
