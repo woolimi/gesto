@@ -1,7 +1,7 @@
 """
 공통 LSTM 제스처 인식기 (Pinch_In, Pinch_Out, Swipe_Left, Swipe_Right).
-MediaPipe Hand Landmarker → 시퀀스 버퍼 → lstm_legacy.tflite 추론.
-학습 시 사용한 정규화·입력 shape와 동일하게 맞춤.
+mp.solutions.hands (Legacy) → 시퀀스 버퍼 → lstm_legacy.tflite 추론.
+학습 데이터(collect_mp_legacy)와 동일한 파이프라인 사용.
 Ubuntu: tflite-runtime 또는 tensorflow. Mac: tensorflow (tf.lite).
 """
 
@@ -12,8 +12,6 @@ from typing import Any, Callable, Optional
 
 import cv2
 import numpy as np
-from mediapipe.tasks import python as mp_tasks
-from mediapipe.tasks.python import vision
 import mediapipe as mp
 
 import config
@@ -42,7 +40,8 @@ def _normalize_landmarks(data: np.ndarray) -> np.ndarray:
 
 class LstmGestureBase:
     """
-    lstm_legacy.tflite + MediaPipe Hand Landmarker 기반 4종 제스처 인식.
+    lstm_legacy.tflite + mp.solutions.hands (Legacy) 기반 4종 제스처 인식.
+    학습 데이터(collect_mp_legacy)와 동일한 랜드마크 파이프라인 사용.
     process(frame_bgr) → "Pinch_In" | "Pinch_Out" | "Swipe_Left" | "Swipe_Right" | None.
     """
 
@@ -66,17 +65,14 @@ class LstmGestureBase:
         self._cooldown_until = 0.0
         self._buffer: deque = deque(maxlen=SEQUENCE_LENGTH)
 
-        # MediaPipe Hand Landmarker
-        hand_model_path = os.path.join(config.MODELS_DIR, "hand_landmarker.task")
-        base_options = mp_tasks.BaseOptions(model_asset_path=hand_model_path)
-        options = vision.HandLandmarkerOptions(
-            base_options=base_options,
-            num_hands=1,
-            min_hand_detection_confidence=0.25,
-            min_hand_presence_confidence=0.25,
-            min_tracking_confidence=0.25,
+        # mp.solutions.hands (Legacy) — 학습 데이터 수집(collect_mp_legacy)과 동일
+        self._mp_hands = mp.solutions.hands
+        self._hands = self._mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
         )
-        self._landmarker = vision.HandLandmarker.create_from_options(options)
 
         tflite_path = os.path.join(config.MODELS_DIR, "lstm_legacy.tflite")
         if not os.path.isfile(tflite_path):
@@ -117,14 +113,13 @@ class LstmGestureBase:
         )
 
     def _get_landmarks_from_frame(self, frame_bgr) -> Optional[np.ndarray]:
-        """BGR 프레임에서 첫 번째 손의 랜드마크 (21, 3) 반환. 없으면 None."""
+        """BGR 프레임에서 첫 번째 손의 랜드마크 (21, 3) 반환. 없으면 None. Legacy API 사용."""
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        result = self._landmarker.detect(mp_image)
-        if not result.hand_landmarks:
+        results = self._hands.process(rgb)
+        if not results.multi_hand_landmarks:
             return None
-        hand = result.hand_landmarks[0]
-        arr = np.array([[lm.x, lm.y, lm.z] for lm in hand], dtype=np.float32)
+        hls = results.multi_hand_landmarks[0]
+        arr = np.array([[lm.x, lm.y, lm.z] for lm in hls.landmark], dtype=np.float32)
         return arr  # (21, 3)
 
     def process(self, frame_bgr) -> Optional[str]:
@@ -172,7 +167,7 @@ class LstmGestureBase:
         return LSTM_GESTURE_CLASSES[pred_idx]
 
     def close(self) -> None:
-        if self._landmarker:
-            self._landmarker.close()
-            self._landmarker = None
+        if self._hands:
+            self._hands.close()
+            self._hands = None
         self._buffer.clear()

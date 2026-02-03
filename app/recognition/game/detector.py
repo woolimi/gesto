@@ -12,15 +12,11 @@ Game 모드 전용 감지.
 """
 
 import math
-import os
+from types import SimpleNamespace
 from typing import Optional
 
 import cv2
-from mediapipe.tasks import python as mp_tasks
-from mediapipe.tasks.python import vision
 import mediapipe as mp
-
-import config
 
 # 랜드마크 인덱스 (trigger.py와 동일)
 WRIST = 0
@@ -139,49 +135,47 @@ def _normalize_angle(deg: float) -> float:
 def _hand_label_from_result(result, index: int) -> str:
     """
     result에서 index번 손의 Left/Right 라벨 반환.
-    MediaPipe는 프레임마다 hand_landmarks 순서가 바뀔 수 있으므로, EMA는 리스트 인덱스가 아니라
-    손 identity(Left/Right) 기준으로 유지해야 함.
+    mp.solutions.hands: multi_handedness[i].classification[0].label 사용.
     """
     try:
         if not hasattr(result, "handedness") or not result.handedness or index >= len(result.handedness):
             return str(index)
         h = result.handedness[index]
-        name = None
+        if hasattr(h, "classification") and len(h.classification) > 0:
+            name = h.classification[0].label
+            if name in ("Left", "Right"):
+                return name
         if hasattr(h, "categories") and len(h.categories) > 0:
             c = h.categories[0]
             name = getattr(c, "category_name", None) or getattr(c, "label", None)
-        if name is None and hasattr(h, "classification") and len(h.classification) > 0:
-            c = h.classification[0]
-            name = getattr(c, "label", None) or getattr(c, "category_name", None)
-        if name in ("Left", "Right"):
-            return name
+            if name in ("Left", "Right"):
+                return name
     except (IndexError, AttributeError, TypeError):
         pass
     return str(index)
 
 
 class GameDetector:
-    """Game 모드: 검지 포인팅으로 직진/후진/좌회전/우회전 방향 감지. 양손·동시 2방향 지원."""
+    """Game 모드: 검지 포인팅으로 직진/후진/좌회전/우회전 방향 감지. mp.solutions.hands (Solution API) 사용."""
 
     def __init__(self):
         # 손별 각도 EMA (Left/Right 기준). 프레임마다 손 순서가 바뀌어도 동일 손끼리 스무딩
         self._angle_ema: dict[str, Optional[float]] = {"Left": None, "Right": None}
-        model_path = os.path.join(config.MODELS_DIR, "hand_landmarker.task")
-        base_options = mp_tasks.BaseOptions(model_asset_path=model_path)
-        # 2손 인식: num_hands=2. 임계값 낮춰 손/제스처 인식률 확보 (검지 포인팅이 잘 잡히도록)
-        options = vision.HandLandmarkerOptions(
-            base_options=base_options,
-            num_hands=2,
-            min_hand_detection_confidence=0.25,
-            min_hand_presence_confidence=0.25,
+        self._mp_hands = mp.solutions.hands
+        self._hands = self._mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=2,
+            min_detection_confidence=0.25,
             min_tracking_confidence=0.25,
         )
-        self._landmarker = vision.HandLandmarker.create_from_options(options)
 
     def _detect(self, frame_bgr):
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        return self._landmarker.detect(mp_image)
+        results = self._hands.process(rgb)
+        out = SimpleNamespace()
+        out.hand_landmarks = [h.landmark for h in (results.multi_hand_landmarks or [])]
+        out.handedness = results.multi_handedness or []
+        return out
 
     def process(self, frame_bgr) -> Optional[str]:
         """
@@ -230,7 +224,6 @@ class GameDetector:
         return "|".join(ordered)
 
     def close(self) -> None:
-        """리소스 해제 (Hand Landmarker)."""
-        if self._landmarker:
-            self._landmarker.close()
-            self._landmarker = None
+        if self._hands:
+            self._hands.close()
+            self._hands = None

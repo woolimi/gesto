@@ -1,10 +1,9 @@
 import os
 import time
 from enum import Enum
+from types import SimpleNamespace
 
 import cv2
-from mediapipe.tasks import python as mp_tasks
-from mediapipe.tasks.python import vision
 import mediapipe as mp
 
 import config
@@ -99,26 +98,26 @@ def _draw_landmarks_on_frame(frame_bgr, result, motion_active: bool):
             cv2.line(frame_bgr, pts[i], pts[j], color, thickness)
 
 class PostureTriggerDetector:
+    """mp.solutions.hands (Solution API) 기반 트리거 감지."""
+
     def __init__(self, hold_duration_sec: float = TRIGGER_HOLD_DURATION_SEC):
         self._hold_duration_sec = hold_duration_sec
         self._hold_candidate: TriggerResult | None = None
         self._hold_since: float = 0.0
-        # 환경에 맞춰 config.MODELS_DIR 사용
-        model_path = os.path.join(config.MODELS_DIR, "hand_landmarker.task")
-        base_options = mp_tasks.BaseOptions(model_asset_path=model_path)
-        options = vision.HandLandmarkerOptions(
-            base_options=base_options,
-            num_hands=2,
-            min_hand_detection_confidence=0.7, # 정확도를 위해 상향
-            min_hand_presence_confidence=0.7,
+        self._mp_hands = mp.solutions.hands
+        self._hands = self._mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=2,
+            min_detection_confidence=0.7,
             min_tracking_confidence=0.7,
         )
-        self._landmarker = vision.HandLandmarker.create_from_options(options)
 
     def _detect(self, frame_bgr):
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        return self._landmarker.detect(mp_image)
+        results = self._hands.process(rgb)
+        out = SimpleNamespace()
+        out.hand_landmarks = [h.landmark for h in (results.multi_hand_landmarks or [])]
+        return out
 
     def _result_to_trigger(self, result, motion_active: bool) -> TriggerResult:
         # 반드시 두 손이 다 보여야 함
@@ -174,5 +173,6 @@ class PostureTriggerDetector:
         return trigger, annotated
 
     def close(self):
-        if self._landmarker:
-            self._landmarker.close()
+        if self._hands:
+            self._hands.close()
+            self._hands = None
