@@ -23,7 +23,7 @@ class GestureDisplayWidget(QWidget):
         self.status_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         self.status_label.setStyleSheet(f"color: {config.COLOR_TEXT_PRIMARY};")
         layout.addWidget(self.status_label)
-        self.gesture_label = QLabel("제스처를 인식하지 않았습니다")
+        self.gesture_label = QLabel("동작 감지가 시작되지 않았습니다")
         self.gesture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.gesture_label.setFont(QFont("Arial", 12))
         self.gesture_label.setStyleSheet(f"color: {config.COLOR_TEXT_SECONDARY};")
@@ -33,4 +33,10 @@ class GestureDisplayWidget(QWidget):
 
     def update_status(self, status: str, gesture: str = None):
         self.status_label.setText(status)
-        self.gesture_label.setText(f"인식된 제스처: {gesture}" if gesture else "제스처를 인식하지 않았습니다")
+        if status == "대기 중":
+            self.gesture_label.setText("동작 감지가 시작되지 않았습니다")
+        elif gesture:
+            self.gesture_label.setText(f"인식된 제스처: {gesture}")
+        else:
+            # 감지 중이지만 아직 제스처 없음
+            self.gesture_label.setText("제스처가 인식되지 않았습니다")

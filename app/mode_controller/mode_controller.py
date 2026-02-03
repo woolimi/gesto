@@ -29,7 +29,9 @@ class ModeController(QObject):
     def _build_gesture_mapping(self) -> dict[tuple[str, str], object]:
         """(mode, gesture_name) -> pynput Key 또는 문자. Game은 방향키(↑↓←→)."""
         return {
-            # PPT: 다음/이전 슬라이드 (한손 주먹 + 좌/우 슬라이드)
+            # PPT: 공통 LSTM Swipe만 사용 (app/models/ lstm_legacy)
+            ("PPT", "Swipe_Left"): Key.left,
+            ("PPT", "Swipe_Right"): Key.right,
             ("PPT", "next"): Key.right,
             ("PPT", "prev"): Key.left,
             ("PPT", "next_slide"): Key.right,

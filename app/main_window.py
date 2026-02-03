@@ -121,3 +121,5 @@ class MainWindow(QMainWindow):
         """인식된 제스처 표시 (백엔드 연결 시 사용)."""
         if self.is_detecting:
             self.webcam_panel.gesture_display.update_status("감지 중", gesture_name)
+        else:
+            self.webcam_panel.gesture_display.update_status("대기 중", gesture_name)

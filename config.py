@@ -26,10 +26,21 @@ GESTURE_DETECTION_FPS = 30
 GESTURE_SEQUENCE_LENGTH = 30  # LSTM 입력 시퀀스 길이
 GESTURE_CONFIDENCE_THRESHOLD = 0.7  # 기본 신뢰도 임계값
 
-# 감도 설정 (0-100)
+# 감도 설정 (0-100). UI 감도 → LSTM confidence threshold 매핑 (재훈련 불필요)
 SENSITIVITY_DEFAULT = 50
 SENSITIVITY_MIN = 0
 SENSITIVITY_MAX = 100
+# 감도 0(엄격) → threshold 0.9, 감도 100(쉽게) → threshold 0.3
+SENSITIVITY_THRESHOLD_MIN = 0.3
+SENSITIVITY_THRESHOLD_MAX = 0.9
+
+
+def sensitivity_to_confidence_threshold(sensitivity: int) -> float:
+    """UI 감도 0~100을 LSTM 인식용 confidence threshold(0.3~0.9)로 변환."""
+    sensitivity = max(SENSITIVITY_MIN, min(SENSITIVITY_MAX, sensitivity))
+    return SENSITIVITY_THRESHOLD_MAX - (sensitivity / 100) * (
+        SENSITIVITY_THRESHOLD_MAX - SENSITIVITY_THRESHOLD_MIN
+    )
 
 # UI 설정
 WINDOW_WIDTH = 1200

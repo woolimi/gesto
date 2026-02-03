@@ -29,7 +29,10 @@ def main():
     mode_controller = ModeController(initial_mode="GAME")
     camera = CameraWorker()
     trigger = TriggerWorker()
-    mode_detection = ModeDetectionWorker(get_current_mode=mode_controller.get_mode)
+    mode_detection = ModeDetectionWorker(
+        get_current_mode=mode_controller.get_mode,
+        get_sensitivity=lambda: window.sensitivity,
+    )
 
     # UI → Mode Controller
     window.mode_changed.connect(mode_controller.set_mode)

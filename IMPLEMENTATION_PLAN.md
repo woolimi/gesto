@@ -79,8 +79,8 @@
 ### Phase 3: MediaPipe + LSTM — 모드별 인식
 
 - [x] **Game (Posture)**: [app/recognition/game/detector.py](app/recognition/game/detector.py) — 직진/후진/좌회전/우회전 (방향키, 양손·동시 2방향, 검지 포인팅)
-- [ ] **PPT (공통 LSTM)**: [app/recognition/ppt/detector.py](app/recognition/ppt/detector.py) — **lstm_legacy.tflite** 사용. **Swipe_Left** → 이전 슬라이드, **Swipe_Right** → 다음 슬라이드. **Pinch_In / Pinch_Out 은 무시.**
-- [ ] **YouTube (공통 LSTM)**: [app/recognition/youtube/detector.py](app/recognition/youtube/detector.py) — **lstm_legacy.tflite** 사용. Swipe_Left/Right → 10초 뒤/앞, Pinch_In/Out → 재생·정지·음소거·전체화면 등 (동일 모델, 4종 제스처 모두 사용)
+- [ ] **PPT (공통 LSTM)**: [app/recognition/ppt/detector.py](app/recognition/ppt/detector.py) — lstm_legacy.h5 또는 tflite 중 되는거 사용. **Swipe_Left** → 이전 슬라이드, **Swipe_Right** → 다음 슬라이드. **Pinch_In / Pinch_Out 은 무시.**
+- [ ] **YouTube (공통 LSTM)**: [app/recognition/youtube/detector.py](app/recognition/youtube/detector.py) — lstm_legacy.h5 또는 tflite 중 되는거 사용. Swipe_Left/Right → 10초 뒤/앞, Pinch_In/Out → 재생·정지·음소거·전체화면 등 (동일 모델, 4종 제스처 모두 사용)
 - [ ] **공통 LSTM 인식기**: MediaPipe Hand Landmarker로 랜드마크 추출 → 시퀀스 버퍼 → lstm_legacy.tflite 추론 → Pinch_In / Pinch_Out / Swipe_Left / Swipe_Right 출력. PPT/YouTube 모드에서 공유, PPT는 Swipe만 사용
 - [x] **공통**: 트리거(시작/종료) — [app/recognition/trigger.py](app/recognition/trigger.py), [app/workers/trigger_worker.py](app/workers/trigger_worker.py)
 - [x] S-06-GME-01~04: Game 직진/후진/좌회전/우회전
