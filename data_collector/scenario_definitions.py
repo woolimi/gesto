@@ -15,19 +15,19 @@ class ScenarioManager:
     def generate_scenarios(self, gesture_name):
         """
         Generates scenarios for a given gesture name.
-        거리 70/140/200cm × 손 좌/우 × 위치 상단/중앙/하단 × 2회 반복 = 36단계.
+        거리 70/140/200cm × 손 좌/우 × 위치 상단/중앙/하단 × 6회 반복 = 108단계.
         """
         self.gesture_name = gesture_name
         self.scenarios = []
         self.current_index = 0
         
-        # Common Logic: 거리(70/140/200cm), 손(좌/우), 위치(상단/중앙/하단), 반복 2회
+        # Common Logic: 거리(70/140/200cm), 손(좌/우), 위치(상단/중앙/하단), 반복 6회 (36 → 108)
         if gesture_name in self.SUPPORTED_GESTURES:
 
             distances = [70, 140, 200]
             hands = ["Right", "Left"]
             positions = ["Top", "Center", "Bottom"]  # 상단, 중앙, 하단
-            reps = 2
+            reps = 6
 
             # Korean mappings for display
             korean_map = {
