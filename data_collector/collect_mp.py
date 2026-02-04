@@ -295,8 +295,10 @@ class LegacyCollector(QMainWindow):
                     # 시나리오 모드일 경우 단계 뒤로 가기
                     if self.is_scenario_mode:
                         if self.scenario_manager.prev():
-                            self.current_episode -= 1 # Legacy 변수 동기화
+                            self.current_episode -= 1  # Legacy 변수 동기화
                             self.status_label.setText(f"삭제됨: {os.path.basename(file_to_delete)}. 이전 단계로 복귀: {self.scenario_manager.get_current_step()['display_text']}")
+                            self.countdown_timer.stop()  # 기존 타이머 중지 후 카운트다운 재시작
+                            self.start_countdown()
                         else:
                             self.status_label.setText(f"삭제됨: {os.path.basename(file_to_delete)}. (첫 단계입니다)")
                     else:
@@ -319,8 +321,10 @@ class LegacyCollector(QMainWindow):
                 self.last_saved_file = None
                 
                 if self.is_scenario_mode:
-                     if self.scenario_manager.prev():
-                         self.current_episode -= 1
+                    if self.scenario_manager.prev():
+                        self.current_episode -= 1
+                        self.countdown_timer.stop()
+                        self.start_countdown()
                 elif self.current_episode > 0:
                         self.current_episode -= 1
             except Exception as e:
@@ -454,6 +458,11 @@ class LegacyCollector(QMainWindow):
         except Exception as e:
             print(f"Error in MediaPipe process: {e}")
         
+        # 카운트다운 중에는 흑백, 녹화 시작 시 컬러
+        if self.countdown_timer.isActive():
+            gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+            cv_img = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        
         # Show Image
         qt_img = self.convert_cv_qt(cv_img)
         self.video_label.setPixmap(qt_img)
@@ -553,9 +562,8 @@ class LegacyCollector(QMainWindow):
         gesture_name = self.gesture_name_input.text().strip()
         mode = self.mode_combo.currentText()
         
-        # Base Data Dir
-        # Save data inside data_collector/data
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'data', 'legacy', mode, gesture_name))
+        # Base Data Dir: data_collector/data/Gesture/<gesture_name> 또는 data/Posture/...
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'data', mode, gesture_name))
         os.makedirs(base_dir, exist_ok=True)
         
         timestamp = int(time.time() * 1000)
@@ -563,7 +571,13 @@ class LegacyCollector(QMainWindow):
         username = self.username_input.text().strip()
         
         if self.is_scenario_mode:
-             # Use Scenario Filename (w/ Username)
+             # 현재 스텝이 없으면 저장하지 않음 (마지막 완료 후 중복 저장 시 unknown.npy 방지)
+             step = self.scenario_manager.get_current_step()
+             if step is None:
+                 self.start_btn.setEnabled(True)
+                 self.toggle_inputs(True)
+                 self.status_label.setText("All Scenarios Completed!")
+                 return
              filename = self.scenario_manager.get_filename(username=username)
         else:
              # Legacy Filename Logic + Username
@@ -585,17 +599,17 @@ class LegacyCollector(QMainWindow):
             
             # Check for Auto-Loop
             if self.is_scenario_mode:
-                # Scenario Mode Logic
-                if self.scenario_manager.next():
-                    self.current_episode += 1 # Just to track total count for legacy var
-                    # Auto start next
-                    self.status_label.setText(f"Next: {self.scenario_manager.get_instruction_text()}")
-                    QTimer.singleShot(1000, self.start_countdown) # 1 sec delay before countdown
-                else:
+                # Scenario Mode Logic (next()는 인덱스만 증가시키고, 마지막 저장 후에도 True를 반환할 수 있음)
+                self.scenario_manager.next()
+                if self.scenario_manager.is_finished():
                     self.start_btn.setEnabled(True)
                     self.toggle_inputs(True)
                     self.status_label.setText("All Scenarios Completed!")
                     QMessageBox.information(self, "Done", "All Scenarios Completed!")
+                else:
+                    self.current_episode += 1
+                    self.status_label.setText(f"Next: {self.scenario_manager.get_instruction_text()}")
+                    QTimer.singleShot(1000, self.start_countdown)
             
             elif self.current_episode < self.target_episodes:
                 # Restart Countdown

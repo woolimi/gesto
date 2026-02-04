@@ -18,7 +18,7 @@ def get_mode_detector(
     if mode_upper == "PPT":
         return PPTDetector(get_confidence_threshold=get_confidence_threshold)
     if mode_upper == "YOUTUBE":
-        return YouTubeDetector()
+        return YouTubeDetector(get_confidence_threshold=get_confidence_threshold)
     if mode_upper == "GAME":
         return GameDetector()
     return PPTDetector(get_confidence_threshold=get_confidence_threshold)

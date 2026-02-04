@@ -36,12 +36,11 @@ class ModeController(QObject):
             ("PPT", "prev"): Key.left,
             ("PPT", "next_slide"): Key.right,
             ("PPT", "prev_slide"): Key.left,
-            # YouTube
-            ("YOUTUBE", "play_pause"): Key.space,
-            ("YOUTUBE", "forward"): Key.right,
-            ("YOUTUBE", "backward"): Key.left,
-            ("YOUTUBE", "mute"): "m",
-            ("YOUTUBE", "fullscreen"): "f",
+            # YouTube: 공통 LSTM 4종 제스처 → YouTube 단축키 (j 10초 뒤, l 10초 앞, k 재생·정지, m 음소거)
+            ("YOUTUBE", "Swipe_Left"): "j",
+            ("YOUTUBE", "Swipe_Right"): "l",
+            ("YOUTUBE", "Pinch_Out"): "k",
+            ("YOUTUBE", "Pinch_In"): "m",
             # Game: 방향키 (크롬 등에서 방향키로 동작하는 게임 제어)
             ("GAME", "forward"): Key.up,
             ("GAME", "back"): Key.down,

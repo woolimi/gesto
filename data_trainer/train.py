@@ -1,4 +1,5 @@
 import os
+import shutil
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
@@ -12,10 +13,11 @@ from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# 경로 설정
+# 경로 설정 (data_collector/data 아래 Gesture, Posture 폴더에서 로드)
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data_collector', 'data'))
-LEGACY_DATA_DIR = os.path.join(DATA_DIR, 'legacy')
 MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'models'))
+# 앱이 로드하는 모델 경로 (학습 후 여기로 복사)
+APP_MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'app', 'models'))
 
 # 하이퍼파라미터
 SEQUENCE_LENGTH = 45  # 1.5초 * 30fps
@@ -45,40 +47,10 @@ def normalize_landmarks(data):
     
     return normalized
 
-def augment_data(X, y, augmentation_factor=2):
-    """
-    데이터 증강: 노이즈 추가로 학습 데이터 증가
-    
-    Args:
-        X: 입력 데이터 (N, 45, 63)
-        y: 레이블 데이터 (N,)
-        augmentation_factor: 증강 배수 (기본 2배)
-    
-    Returns:
-        증강된 X, y
-    """
-    X_aug = []
-    y_aug = []
-    
-    for i in range(len(X)):
-        # 원본 데이터
-        X_aug.append(X[i])
-        y_aug.append(y[i])
-        
-        # 증강 버전들
-        for _ in range(augmentation_factor - 1):
-            # 가우시안 노이즈 추가
-            noise = np.random.normal(0, 0.01, X[i].shape)
-            X_aug.append(X[i] + noise)
-            y_aug.append(y[i])
-    
-    return np.array(X_aug), np.array(y_aug)
-
 def load_data(data_dir, apply_normalization=True):
     """
     특정 디렉토리(legacy 또는 tasks)에서 데이터를 로드합니다.
-    구조: data_dir/<Mode>/<GestureName>/*.npy
-    Mode는 무시하고 GestureName을 레이블로 사용합니다.
+    구조: data_dir/Gesture/<폴더명>/*.npy, data_dir/Posture/<폴더명>/*.npy — 폴더명이 라벨.
     
     Args:
         data_dir: 데이터 디렉토리 경로
@@ -96,29 +68,30 @@ def load_data(data_dir, apply_normalization=True):
         print(f"경고: 디렉토리 {data_dir}가 존재하지 않습니다.")
         return np.array(X), np.array(y), label_map
 
-    # 알려진 모드 'Gesture'와 'Posture' 탐색
+    # 1) Gesture(·Posture) 하위 폴더명 = 라벨. 정렬해서 인덱스 고정.
     modes = ['Gesture', 'Posture']
-    
-    current_label_id = 0
-    
+    all_gestures = set()
     for mode in modes:
         mode_path = os.path.join(data_dir, mode)
         if not os.path.exists(mode_path):
             continue
-            
-        gestures = os.listdir(mode_path)
-        for gesture in gestures:
+        for name in os.listdir(mode_path):
+            if os.path.isdir(os.path.join(mode_path, name)):
+                all_gestures.add(name)
+    for idx, gesture in enumerate(sorted(all_gestures)):
+        label_map[gesture] = idx
+
+    # 2) 데이터 로드
+    for mode in modes:
+        mode_path = os.path.join(data_dir, mode)
+        if not os.path.exists(mode_path):
+            continue
+        for gesture in os.listdir(mode_path):
             gesture_path = os.path.join(mode_path, gesture)
-            if not os.path.isdir(gesture_path):
+            if not os.path.isdir(gesture_path) or gesture not in label_map:
                 continue
-                
-            if gesture not in label_map:
-                label_map[gesture] = current_label_id
-                labels.append(gesture)
-                current_label_id += 1
-            
             label_id = label_map[gesture]
-            
+
             # 모든 .npy 파일 로드
             for file in os.listdir(gesture_path):
                 if file.endswith('.npy'):
@@ -148,6 +121,65 @@ def load_data(data_dir, apply_normalization=True):
                         print(f"Error loading {file_path}: {e}")
                         
     return np.array(X), np.array(y), label_map
+
+
+def print_class_distribution(y, label_map):
+    """클래스별 샘플 수 출력 (불균형 확인용)."""
+    id_to_name = {v: k for k, v in label_map.items()}
+    unique, counts = np.unique(y, return_counts=True)
+    print("📋 클래스별 샘플 수:")
+    for uid, cnt in zip(unique, counts):
+        name = id_to_name.get(uid, f"Class_{uid}")
+        print(f"   {name}: {cnt}")
+    print()
+
+
+def audit_legacy_data(data_dir):
+    """
+    데이터 양·형태 점검. 라벨 = Gesture(·Posture) 하위 폴더명.
+    """
+    if not os.path.exists(data_dir):
+        print(f"⚠️ 디렉토리 없음: {data_dir}")
+        return
+    modes = ["Gesture", "Posture"]
+    per_class = {}
+    issues = []
+    for mode in modes:
+        mode_path = os.path.join(data_dir, mode)
+        if not os.path.exists(mode_path):
+            continue
+        for gesture in sorted(os.listdir(mode_path)):
+            gpath = os.path.join(mode_path, gesture)
+            if not os.path.isdir(gpath):
+                continue
+            npy_files = [f for f in os.listdir(gpath) if f.endswith(".npy")]
+            per_class[gesture] = per_class.get(gesture, 0) + len(npy_files)
+            if gesture != gesture.strip():
+                issues.append(f"폴더명 앞뒤 공백: '{gesture}'")
+            if npy_files:
+                try:
+                    one = np.load(os.path.join(gpath, npy_files[0]))
+                    if one.ndim != 3 or one.shape[1] != 21 or one.shape[2] != 3:
+                        issues.append(f"{gesture}: shape 기대 (T, 21, 3), 실제 {one.shape}")
+                    if one.shape[0] < 5:
+                        issues.append(f"{gesture}: 프레임 수 너무 적음 ({one.shape[0]})")
+                except Exception as e:
+                    issues.append(f"{gesture}: 로드 실패 - {e}")
+    print("=" * 70)
+    print("📊 데이터 검사 (audit) — 라벨 = Gesture/Posture 하위 폴더명")
+    print("=" * 70)
+    for name, cnt in sorted(per_class.items()):
+        print(f"   {name}: {cnt}개")
+    print()
+    if issues:
+        print("⚠️ 발견된 이슈:")
+        for i in issues:
+            print(f"   - {i}")
+        print()
+    else:
+        print("✅ 이슈 없음.")
+    print()
+
 
 def create_model(num_classes):
     """
@@ -283,7 +315,7 @@ def evaluate_model(model, X_test, y_test, label_map):
     
     return cm
 
-def train_model(X, y, save_path, model_name, apply_augmentation=True):
+def train_model(X, y, save_path, model_name, label_map=None):
     """
     개선된 모델 학습 함수
     
@@ -292,7 +324,7 @@ def train_model(X, y, save_path, model_name, apply_augmentation=True):
         y: 레이블
         save_path: 모델 저장 경로
         model_name: 모델 이름
-        apply_augmentation: 데이터 증강 적용 여부
+        label_map: gesture_name -> label_id (평가 시 실제 이름 표시용)
     
     Returns:
         history, model
@@ -300,12 +332,6 @@ def train_model(X, y, save_path, model_name, apply_augmentation=True):
     if len(X) == 0:
         print(f"{model_name}에 대한 데이터가 없어 학습을 건너뜁니다.")
         return None, None
-
-    # 데이터 증강 (학습 데이터가 적을 경우 유용)
-    if apply_augmentation:
-        print("📈 데이터 증강 적용 중...")
-        X, y = augment_data(X, y, augmentation_factor=2)
-        print(f"   증강 후 데이터 개수: {len(X)}")
 
     # 클래스 가중치 계산 (클래스 불균형 처리)
     class_weights = compute_class_weight('balanced', classes=np.unique(y), y=y)
@@ -374,20 +400,23 @@ def train_model(X, y, save_path, model_name, apply_augmentation=True):
     
     print(f"\n✅ {model_name} 저장 완료: {save_path}")
     
+    # 라벨 순서 저장 (앱에서 인덱스→이름 매핑용)
+    labels_path = save_path.replace(".h5", "_labels.txt")
+    sorted_labels = sorted(label_map.items(), key=lambda x: x[1])
+    with open(labels_path, "w", encoding="utf-8") as f:
+        for name, _ in sorted_labels:
+            f.write(name + "\n")
+    print(f"   레이블: {labels_path}")
+    
     # TFLite 모델 저장
     save_tflite_model(model, save_path)
     
-    # 상세 평가
+    # 상세 평가 (실제 제스처 이름으로 표시)
     print("\n" + "="*70)
     print("🔍 모델 평가 중...")
     print("="*70)
-    
-    # label_map 재구성 (y에서 역으로 추출)
-    label_map = {}
-    for i in range(num_classes):
-        label_map[f"Class_{i}"] = i
-    
-    evaluate_model(model, X_test, y_test, label_map)
+    eval_label_map = label_map if label_map else {f"Class_{i}": i for i in range(num_classes)}
+    evaluate_model(model, X_test, y_test, eval_label_map)
     
     return history, model
 
@@ -431,17 +460,31 @@ def main():
     print("="*70)
     
     print("\n📂 Legacy 데이터 로딩 중...")
-    X_legacy, y_legacy, label_map_legacy = load_data(LEGACY_DATA_DIR, apply_normalization=True)
-    print(f"✅ Legacy 데이터: {X_legacy.shape}, 클래스: {label_map_legacy}")
-    
+    audit_legacy_data(DATA_DIR)
+    X_legacy, y_legacy, label_map_legacy = load_data(DATA_DIR, apply_normalization=True)
+    print(f"✅ Legacy 데이터: {X_legacy.shape}, 클래스: {list(label_map_legacy.keys())}")
+    print_class_distribution(y_legacy, label_map_legacy)
+
     # Train Legacy
     if len(X_legacy) > 0:
         save_path = os.path.join(MODELS_DIR, 'lstm_legacy.h5')
         history, model = train_model(
             X_legacy, y_legacy, save_path, "Legacy Model",
-            apply_augmentation=True
+            label_map=label_map_legacy
         )
         
+        # data_trainer/models → app/models 복사 (앱이 여기서 로드)
+        os.makedirs(APP_MODELS_DIR, exist_ok=True)
+        tflite_src = save_path.replace(".h5", ".tflite")
+        labels_src = save_path.replace(".h5", "_labels.txt")
+        for src, name in [(tflite_src, "lstm_legacy.tflite"), (labels_src, "lstm_legacy_labels.txt")]:
+            if os.path.isfile(src):
+                dst = os.path.join(APP_MODELS_DIR, name)
+                shutil.copy2(src, dst)
+                print(f"   복사: {name} → app/models/")
+            else:
+                print(f"   ⚠️ 복사 생략 (없음): {src}")
+
         # Plot training history
         if history:
             print("\n📈 학습 히스토리 시각화 중...")
@@ -453,11 +496,12 @@ def main():
         print(f"📁 저장된 파일:")
         print(f"   - {save_path}")
         print(f"   - {save_path.replace('.h5', '.tflite')}")
+        print(f"   - app/models/ (위 .tflite, _labels.txt 복사됨)")
         print(f"   - {os.path.join(MODELS_DIR, 'confusion_matrix.png')}")
         print(f"   - {os.path.join(MODELS_DIR, 'training_history.png')}")
         
     else:
-        print("❌ No data found. Please collect data first using collect_mp_legacy.py")
+        print("❌ No data found. Please collect data first using collect_mp.py")
 
 if __name__ == "__main__":
     main()

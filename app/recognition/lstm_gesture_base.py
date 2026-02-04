@@ -1,7 +1,7 @@
 """
 공통 LSTM 제스처 인식기 (Pinch_In, Pinch_Out, Swipe_Left, Swipe_Right).
 mp.solutions.hands (Legacy) → 시퀀스 버퍼 → lstm_legacy.tflite 추론.
-학습 데이터(collect_mp_legacy)와 동일한 파이프라인 사용.
+학습 데이터(collect_mp)와 동일한 파이프라인 사용.
 Ubuntu: tflite-runtime 또는 tensorflow. Mac: tensorflow (tf.lite).
 """
 
@@ -22,8 +22,16 @@ LANDMARKS_COUNT = 21
 COORDS_COUNT = 3
 INPUT_SHAPE = (SEQUENCE_LENGTH, LANDMARKS_COUNT * COORDS_COUNT)
 
-# 클래스 순서: load_data에서 Gesture 폴더 알파벳 순 → Pinch_In, Pinch_Out, Swipe_Left, Swipe_Right
-LSTM_GESTURE_CLASSES = ["Pinch_In", "Pinch_Out", "Swipe_Left", "Swipe_Right"]
+
+def _load_gesture_classes(models_dir: str, base_name: str = "lstm_legacy") -> list:
+    """학습 시 저장한 레이블 순서 로드. 없으면 기본 순서."""
+    path = os.path.join(models_dir, f"{base_name}_labels.txt")
+    if os.path.isfile(path):
+        with open(path, "r", encoding="utf-8") as f:
+            classes = [line.strip() for line in f if line.strip()]
+        if classes:
+            return classes
+    return ["Pinch_In", "Pinch_Out", "Swipe_Left", "Swipe_Right"]
 
 
 def _normalize_landmarks(data: np.ndarray) -> np.ndarray:
@@ -41,7 +49,7 @@ def _normalize_landmarks(data: np.ndarray) -> np.ndarray:
 class LstmGestureBase:
     """
     lstm_legacy.tflite + mp.solutions.hands (Legacy) 기반 4종 제스처 인식.
-    학습 데이터(collect_mp_legacy)와 동일한 랜드마크 파이프라인 사용.
+    학습 데이터(collect_mp)와 동일한 랜드마크 파이프라인 사용.
     process(frame_bgr) → "Pinch_In" | "Pinch_Out" | "Swipe_Left" | "Swipe_Right" | None.
     """
 
@@ -65,7 +73,7 @@ class LstmGestureBase:
         self._cooldown_until = 0.0
         self._buffer: deque = deque(maxlen=SEQUENCE_LENGTH)
 
-        # mp.solutions.hands (Legacy) — 학습 데이터 수집(collect_mp_legacy)과 동일
+        # mp.solutions.hands (Legacy) — 학습 데이터 수집(collect_mp)과 동일
         self._mp_hands = mp.solutions.hands
         self._hands = self._mp_hands.Hands(
             static_image_mode=False,
@@ -80,6 +88,7 @@ class LstmGestureBase:
                 f"LSTM 모델 파일이 없습니다: {tflite_path} "
                 "(app/models/lstm_legacy.tflite 필요)"
             )
+        self._gesture_classes = _load_gesture_classes(config.MODELS_DIR)
         InterpreterClass = self._get_tflite_interpreter_class()
         self._interpreter: Any = InterpreterClass(model_path=tflite_path)
         self._interpreter.allocate_tensors()
@@ -164,7 +173,7 @@ class LstmGestureBase:
             return None
         self._cooldown_until = now + self._cooldown_sec
 
-        return LSTM_GESTURE_CLASSES[pred_idx]
+        return self._gesture_classes[pred_idx]
 
     def close(self) -> None:
         if self._hands:
