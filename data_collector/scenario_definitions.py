@@ -1,4 +1,6 @@
 SUPPORTED_GESTURES = ["Pinch_In", "Pinch_Out", "Swipe_Left", "Swipe_Right"]
+# 좌/우 손 경우의 수를 사용하는 제스처 (Pinch만)
+GESTURES_WITH_HANDS = ["Pinch_In", "Pinch_Out"]
 
 
 class ScenarioManager:
@@ -15,41 +17,47 @@ class ScenarioManager:
     def generate_scenarios(self, gesture_name):
         """
         Generates scenarios for a given gesture name.
-        거리 70/140/200cm × 손 좌/우 × 위치 상단/중앙/하단 × 6회 반복 = 108단계.
+        - Pinch_In, Pinch_Out: 거리 × 손(좌/우) × 위치 × 6회 = 108단계
+        - Swipe_Left, Swipe_Right: 거리 × 위치 × 6회 = 54단계 (손 고정: Swipe_Left=오른손, Swipe_Right=왼손)
         """
         self.gesture_name = gesture_name
         self.scenarios = []
         self.current_index = 0
-        
-        # Common Logic: 거리(70/140/200cm), 손(좌/우), 위치(상단/중앙/하단), 반복 6회 (36 → 108)
-        if gesture_name in self.SUPPORTED_GESTURES:
 
-            distances = [70, 140, 200]
+        if gesture_name not in self.SUPPORTED_GESTURES:
+            self.total_scenarios = 0
+            return
+
+        distances = [70, 140, 200]
+        positions = ["Top", "Center", "Bottom"]  # 상단, 중앙, 하단
+        reps = 6
+
+        # Pinch만 좌/우 손 경우의 수 사용. Swipe는 한 손만 (Swipe_Left=오른손, Swipe_Right=왼손)
+        if gesture_name in GESTURES_WITH_HANDS:
             hands = ["Right", "Left"]
-            positions = ["Top", "Center", "Bottom"]  # 상단, 중앙, 하단
-            reps = 6
+        else:
+            hands = ["Right"] if gesture_name == "Swipe_Left" else ["Left"]
 
-            # Korean mappings for display
-            korean_map = {
-                "Right": "오른손", "Left": "왼손",
-                "Top": "상단", "Center": "중앙", "Bottom": "하단",
-                "Outward": "바깥으로", "Inward": "안쪽으로",
-            }
+        korean_map = {
+            "Right": "오른손", "Left": "왼손",
+            "Top": "상단", "Center": "중앙", "Bottom": "하단",
+            "Outward": "바깥으로", "Inward": "안쪽으로",
+        }
 
-            for dist in distances:
-                for hand in hands:
-                    for pos in positions:
-                        fixed_direction = "Outward"
-                        for i in range(reps):
-                            step = {
-                                "distance": dist,
-                                "hand": hand,
-                                "position": pos,
-                                "direction": fixed_direction,
-                                "rep": i + 1,
-                                "display_text": f"{dist}cm | {korean_map.get(hand, hand)} | {korean_map.get(pos, pos)}"
-                            }
-                            self.scenarios.append(step)
+        for dist in distances:
+            for hand in hands:
+                for pos in positions:
+                    fixed_direction = "Outward"
+                    for i in range(reps):
+                        step = {
+                            "distance": dist,
+                            "hand": hand,
+                            "position": pos,
+                            "direction": fixed_direction,
+                            "rep": i + 1,
+                            "display_text": f"{dist}cm | {korean_map.get(hand, hand)} | {korean_map.get(pos, pos)}"
+                        }
+                        self.scenarios.append(step)
 
         
         self.total_scenarios = len(self.scenarios)

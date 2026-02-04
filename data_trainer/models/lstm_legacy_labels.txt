@@ -1,0 +1,4 @@
+Pinch_In
+Pinch_Out
+Swipe_Left
+Swipe_Right
