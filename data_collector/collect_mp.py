@@ -14,6 +14,8 @@ from PyQt6.QtGui import QImage, QPixmap
 # Ensure the project root is in the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import config
+
 # 시나리오 매니저 임포트
 try:
     from data_collector.scenario_definitions import ScenarioManager
@@ -57,9 +59,10 @@ class VideoThread(QThread):
     def __init__(self):
         super().__init__()
         self._run_flag = True
-        self.cap = cv2.VideoCapture(0)
-        # FPS 설정 시도
-        self.cap.set(cv2.CAP_PROP_FPS, 30)
+        self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+        self.cap.set(cv2.CAP_PROP_FPS, config.CAMERA_FPS)
 
     def set_camera_property(self, prop_id, value):
         if self.cap.isOpened():
