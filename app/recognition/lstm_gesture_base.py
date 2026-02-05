@@ -131,14 +131,14 @@ class LstmGestureBase:
         arr = np.array([[lm.x, lm.y, lm.z] for lm in hls.landmark], dtype=np.float32)
         return arr  # (21, 3)
 
-    def process(self, frame_bgr) -> Optional[str]:
+    def process(self, frame_bgr) -> tuple[Optional[str], float]:
         """
         한 프레임 처리. 버퍼가 찼을 때만 추론.
-        반환: "Pinch_In" | "Pinch_Out" | "Swipe_Left" | "Swipe_Right" | None.
+        반환: ("Pinch_In", confidence) | (None, 0.0).
         """
         landmarks = self._get_landmarks_from_frame(frame_bgr)
         if landmarks is None:
-            return None
+            return None, 0.0
 
         # (21, 3) → (1, 21, 3) 정규화 후 (63,)로 버퍼에 추가
         data = np.expand_dims(landmarks, axis=0)
@@ -147,7 +147,7 @@ class LstmGestureBase:
         self._buffer.append(row)
 
         if len(self._buffer) < SEQUENCE_LENGTH:
-            return None
+            return None, 0.0
 
         # (45, 63) → (1, 45, 63) 배치로 추론
         input_data = np.array(self._buffer, dtype=np.float32)
@@ -167,13 +167,13 @@ class LstmGestureBase:
             else self._confidence_threshold
         )
         if confidence < threshold:
-            return None
+            return None, 0.0
         now = time.monotonic()
         if now < self._cooldown_until:
-            return None
+            return None, 0.0
         self._cooldown_until = now + self._cooldown_sec
 
-        return self._gesture_classes[pred_idx]
+        return self._gesture_classes[pred_idx], confidence
 
     def close(self) -> None:
         if self._hands:

@@ -177,15 +177,15 @@ class GameDetector:
         out.handedness = results.multi_handedness or []
         return out
 
-    def process(self, frame_bgr) -> Optional[str]:
+    def process(self, frame_bgr) -> tuple[Optional[str], float]:
         """
         BGR 프레임에서 자세/제스처 판별.
         검지만 방향을 가리키고 나머지(중지·약지·소지) 접힌 상태일 때만 인식.
-        반환: None, "forward", "back", "left", "right", 또는 "dir1|dir2" (최대 2방향, 정렬됨).
+        반환: (None, 0.0) 또는 (gesture_name, 1.0).
         """
         result = self._detect(frame_bgr)
         if not result.hand_landmarks:
-            return None
+            return None, 0.0
 
         directions = []
         for i, hand_landmarks in enumerate(result.hand_landmarks):
@@ -219,9 +219,9 @@ class GameDetector:
                     break
 
         if not directions:
-            return None
+            return None, 0.0
         ordered = sorted(directions, key=lambda x: _DIR_ORDER.index(x))
-        return "|".join(ordered)
+        return "|".join(ordered), 1.0
 
     def close(self) -> None:
         if self._hands:

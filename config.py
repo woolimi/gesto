@@ -7,7 +7,7 @@ import os
 # 애플리케이션 정보
 APP_NAME = "Gesto"
 APP_VERSION = "1.0.0"
-APP_DESCRIPTION = "Hands-Free Presentation Control"
+APP_DESCRIPTION = "핸즈프리 제스처 컨트롤 서비스"
 
 # 경로 설정 (app/ 하위)
 _ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -32,31 +32,31 @@ YOUTUBE_COOLDOWN_SEC = 2.0
 SENSITIVITY_DEFAULT = 50
 SENSITIVITY_MIN = 0
 SENSITIVITY_MAX = 100
-# 감도 0(엄격) → threshold 0.9, 감도 100(쉽게) → threshold 0.3
-SENSITIVITY_THRESHOLD_MIN = 0.3
-SENSITIVITY_THRESHOLD_MAX = 0.9
+# 감도 0(엄격) → threshold 0.92, 감도 100(쉽게) → threshold 0.4
+SENSITIVITY_THRESHOLD_MIN = 0.4
+SENSITIVITY_THRESHOLD_MAX = 0.92
 
 
 def sensitivity_to_confidence_threshold(sensitivity: int) -> float:
-    """UI 감도 0~100을 LSTM 인식용 confidence threshold(0.3~0.9)로 변환."""
-    sensitivity = max(SENSITIVITY_MIN, min(SENSITIVITY_MAX, sensitivity))
-    return SENSITIVITY_THRESHOLD_MAX - (sensitivity / 100) * (
+    """UI 감도 0~100을 LSTM 인식용 confidence threshold(0.4~0.92)로 변환 (V72)."""
+    sensitivity = max(0, min(100, sensitivity))
+    return SENSITIVITY_THRESHOLD_MAX - (sensitivity / 100.0) * (
         SENSITIVITY_THRESHOLD_MAX - SENSITIVITY_THRESHOLD_MIN
     )
 
 # UI 설정
-WINDOW_WIDTH = 1200
-WINDOW_HEIGHT = 800
+WINDOW_WIDTH = 1280
+WINDOW_HEIGHT = 720
 WINDOW_TITLE = f"{APP_NAME} - {APP_DESCRIPTION}"
 
-# 색상 테마 (로고 기반 블루 테마)
-COLOR_PRIMARY = "#1E3A5F"  # 진한 네이비 블루
-COLOR_SECONDARY = "#4A90E2"  # 밝은 블루
-COLOR_ACCENT = "#6BB6FF"  # 라이트 블루
-COLOR_BACKGROUND = "#FFFFFF"  # 흰색
-COLOR_TEXT_PRIMARY = "#1E3A5F"  # 진한 블루
-COLOR_TEXT_SECONDARY = "#6B7280"  # 회색
-COLOR_BUTTON_HOVER = "#3B82F6"  # 호버 블루
+# 색상 테마 (V4 Chroma/Neon Dark Theme)
+COLOR_PRIMARY = "#00FFFF"      # Neon Cyan
+COLOR_SECONDARY = "#FF00FF"    # Neon Magenta
+COLOR_ACCENT = "#9D00FF"       # Deep Purple
+COLOR_BACKGROUND = "#050510"   # Deep Dark Navy/Black
+COLOR_TEXT_PRIMARY = "#FFFFFF" # White
+COLOR_TEXT_SECONDARY = "#AAAAAA" # Light Grey
+COLOR_BUTTON_HOVER = "#00CCCC" # Cyan Hover
 
 # 제스처 클래스 정의
 GESTURE_CLASSES = {
