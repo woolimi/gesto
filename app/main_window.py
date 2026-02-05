@@ -693,19 +693,35 @@ class MainWindow(QMainWindow):
 
     def set_always_on_top(self, enable: bool):
         is_currently_on_top = bool(self.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
-        if enable == is_currently_on_top:
+        is_currently_ghost = bool(self.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus)
+        
+        # PPT 모드에서 AOT를 켤 때만 '포커스 비수용(Ghost)' 모드 적용
+        target_ghost = enable and self.current_mode == "PPT"
+        
+        if enable == is_currently_on_top and target_ghost == is_currently_ghost:
             return
             
         self.hide()
+        flags = self.windowFlags()
+        
         if enable:
-            self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-            self.show()
-            self.raise_()
-            self.activateWindow()
+            flags |= Qt.WindowType.WindowStaysOnTopHint
         else:
-            self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
-            self.show()
+            flags &= ~Qt.WindowType.WindowStaysOnTopHint
             
+        if target_ghost:
+            flags |= Qt.WindowType.WindowDoesNotAcceptFocus
+        else:
+            flags &= ~Qt.WindowType.WindowDoesNotAcceptFocus
+            
+        self.setWindowFlags(flags)
+        self.show()
+        
+        if enable:
+            self.raise_()
+            if not target_ghost:
+                self.activateWindow()
+        
         # Update UI Indicator
         self.top_bar.set_aot(enable)
         
@@ -769,6 +785,11 @@ class MainWindow(QMainWindow):
         self.current_mode = mode
         self.mode_changed.emit(mode)
         self.top_bar.set_status(self.is_detecting, mode)
+        
+        # 모드 변경 시 '항상 위에'의 Ghost 모드 상태 업데이트 (PPT <-> Other 대응)
+        is_on_top = bool(self.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
+        if is_on_top:
+            self.set_always_on_top(True)
 
     def update_webcam_frame(self, pixmap):
         if not pixmap or pixmap.isNull(): return
