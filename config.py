@@ -27,7 +27,7 @@ GESTURE_SEQUENCE_LENGTH = 30  # LSTM 입력 시퀀스 길이
 # True면 UI에 제스처별 확률·threshold 디버그 표시 (기존 UI 유지)
 GESTURE_DEBUG = True
 # 모드별 쿨다운(초). 제스처 인식 후 이 시간 동안 새 제스처 인식 안 함
-PPT_COOLDOWN_SEC = 1.5
+PPT_COOLDOWN_SEC = 1.0
 YOUTUBE_COOLDOWN_SEC = 2.0
 
 # 감도 설정 (0-100). UI 감도 → LSTM confidence threshold 매핑 (재훈련 불필요)

@@ -24,8 +24,8 @@ SEQUENCE_LENGTH = 30  # 1초 * 30fps (제스처 구간에 집중, 한손 주먹�
 LANDMARKS_COUNT = 42
 COORDS_COUNT = 3
 INPUT_SHAPE = (SEQUENCE_LENGTH, LANDMARKS_COUNT * COORDS_COUNT)
-EPOCHS = 100  # Early stopping으로 실제로는 더 적게 학습될 수 있음
-BATCH_SIZE = 16
+EPOCHS = 200  # Early stopping으로 실제로는 더 적게 학습될 수 있음
+BATCH_SIZE = 32
 
 def normalize_landmarks(data):
     """

@@ -21,16 +21,26 @@ class PPTDetector:
             cooldown_sec=config.PPT_COOLDOWN_SEC,
         )
 
-    def process(self, frame_bgr) -> Optional[str]:
-        gesture = self._base.process(frame_bgr)
+    def process(self, frame_bgr) -> tuple[Optional[str], float]:
+        """LSTM 베이스와 동일하게 (gesture, confidence) 반환. Swipe만 인정."""
+        result = self._base.process(frame_bgr)
+        if isinstance(result, tuple):
+            gesture, confidence = result
+        else:
+            gesture, confidence = result, 0.0
         if gesture in self._SWIPE_ONLY:
-            return gesture
-        return None
+            return (gesture, confidence)
+        return (None, 0.0)
 
     @property
     def cooldown_until(self) -> float:
         """쿨다운 종료 시각 (time.monotonic()). UI와 동기화용."""
         return self._base.cooldown_until if self._base is not None else 0.0
+
+    @property
+    def last_probs(self) -> dict:
+        """마지막 인식 시 모든 클래스별 확률. UI/디버그 표시용 (YouTubeDetector와 동일)."""
+        return getattr(self._base, "last_probs", {}) if self._base else {}
 
     def close(self) -> None:
         if self._base is not None:

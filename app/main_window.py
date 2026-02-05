@@ -811,7 +811,11 @@ class MainWindow(QMainWindow):
 
 
     def update_gesture(self, gesture_name: str, confidence: float = 0.0, cooldown_until: float = 0.0):
-        # 제스처 정보를 UI/게이지에 전달 (디버그용 랜덤 값 삭제)
+        # Unknown은 PPT처럼 무시 — UI·디버그에도 인식된 제스처로 표시하지 않음
+        raw = (gesture_name or "").strip()
+        if raw and raw.lower() == "unknown":
+            gesture_name = ""
+        # 제스처 정보를 UI/게이지에 전달
         if self.is_detecting and gesture_name:
              self.accuracy_gauge.set_accuracy(int(confidence * 100))
         else:

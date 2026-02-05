@@ -2,6 +2,7 @@ SUPPORTED_GESTURES = [
     "Pinch_In_Left", "Pinch_In_Right",
     "Pinch_Out_Left", "Pinch_Out_Right",
     "Swipe_Left", "Swipe_Right",
+    "Unknown",  # 인식 불명/기타 자세 학습용 (모션 인식 시 동작 없음)
 ]
 
 
@@ -27,6 +28,10 @@ class ScenarioManager:
         self.current_index = 0
 
         if gesture_name not in self.SUPPORTED_GESTURES:
+            self.total_scenarios = 0
+            return
+        if gesture_name == "Unknown":
+            # Unknown은 시나리오 없이 수동 에피소드로만 수집
             self.total_scenarios = 0
             return
 
