@@ -1,7 +1,7 @@
 """
 PPT 모드 전용 감지.
 app/models/의 lstm_legacy(tflite/h5) 사용. Swipe_Left → 이전 슬라이드, Swipe_Right → 다음 슬라이드.
-Pinch_In / Pinch_Out 은 무시.
+Pinch_* 제스처는 무시 (Swipe만 사용).
 """
 
 from typing import Callable, Optional
@@ -21,11 +21,11 @@ class PPTDetector:
             cooldown_sec=config.PPT_COOLDOWN_SEC,
         )
 
-    def process(self, frame_bgr) -> tuple[Optional[str], float]:
-        gesture, confidence = self._base.process(frame_bgr)
+    def process(self, frame_bgr) -> Optional[str]:
+        gesture = self._base.process(frame_bgr)
         if gesture in self._SWIPE_ONLY:
-            return gesture, confidence
-        return None, 0.0
+            return gesture
+        return None
 
     @property
     def cooldown_until(self) -> float:

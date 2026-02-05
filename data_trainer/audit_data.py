@@ -31,7 +31,7 @@ def audit_legacy_data(data_dir):
             if gesture != gesture.strip():
                 issues.append(f"폴더명 앞뒤 공백: '{gesture}'")
             if gesture.lower() == gesture and gesture not in ("unknown",):
-                issues.append(f"폴더명이 소문자만: '{gesture}' (대소문자 일치 권장: Pinch_In, Swipe_Left 등)")
+                issues.append(f"폴더명이 소문자만: '{gesture}' (대소문자 일치 권장: Pinch_In_Left, Swipe_Left 등)")
             if npy_files:
                 try:
                     one = np.load(os.path.join(gpath, npy_files[0]))
@@ -55,7 +55,7 @@ def audit_legacy_data(data_dir):
     else:
         print("✅ shape/폴더명 이슈 없음.")
     print("💡 라벨은 '폴더 이름'으로만 결정됩니다. 수집 시 제스처 이름을 정확히 입력했는지 확인하세요.")
-    print("   (예: Pinch_In, Pinch_Out, Swipe_Left, Swipe_Right)")
+    print("   (예: Pinch_In_Left, Pinch_Out_Right, Swipe_Left, Swipe_Right)")
     print()
 
 

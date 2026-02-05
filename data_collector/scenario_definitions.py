@@ -1,6 +1,8 @@
-SUPPORTED_GESTURES = ["Pinch_In", "Pinch_Out", "Swipe_Left", "Swipe_Right"]
-# 좌/우 손 경우의 수를 사용하는 제스처 (Pinch만)
-GESTURES_WITH_HANDS = ["Pinch_In", "Pinch_Out"]
+SUPPORTED_GESTURES = [
+    "Pinch_In_Left", "Pinch_In_Right",
+    "Pinch_Out_Left", "Pinch_Out_Right",
+    "Swipe_Left", "Swipe_Right",
+]
 
 
 class ScenarioManager:
@@ -17,8 +19,8 @@ class ScenarioManager:
     def generate_scenarios(self, gesture_name):
         """
         Generates scenarios for a given gesture name.
-        - Pinch_In, Pinch_Out: 거리 × 손(좌/우) × 위치 × 6회 = 108단계
-        - Swipe_Left, Swipe_Right: 거리 × 위치 × 6회 = 54단계 (손 고정: Swipe_Left=오른손, Swipe_Right=왼손)
+        - Pinch_*_Left/Right: 거리 × 위치 × 6회 = 54단계 (손은 제스처명에 따라 고정)
+        - Swipe_Left, Swipe_Right: 거리 × 위치 × 6회 = 54단계 (Swipe_Left=오른손, Swipe_Right=왼손)
         """
         self.gesture_name = gesture_name
         self.scenarios = []
@@ -32,11 +34,15 @@ class ScenarioManager:
         positions = ["Top", "Center", "Bottom"]  # 상단, 중앙, 하단
         reps = 6
 
-        # Pinch만 좌/우 손 경우의 수 사용. Swipe는 한 손만 (Swipe_Left=오른손, Swipe_Right=왼손)
-        if gesture_name in GESTURES_WITH_HANDS:
-            hands = ["Right", "Left"]
-        else:
-            hands = ["Right"] if gesture_name == "Swipe_Left" else ["Left"]
+        # 제스처별 손 고정 (훈련용으로 좌/우 분리)
+        if gesture_name in ("Pinch_In_Left", "Pinch_Out_Left"):
+            hands = ["Left"]
+        elif gesture_name in ("Pinch_In_Right", "Pinch_Out_Right"):
+            hands = ["Right"]
+        elif gesture_name == "Swipe_Left":
+            hands = ["Right"]
+        else:  # Swipe_Right
+            hands = ["Left"]
 
         korean_map = {
             "Right": "오른손", "Left": "왼손",

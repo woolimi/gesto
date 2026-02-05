@@ -32,11 +32,13 @@ class ModeController(QObject):
             # PPT: 공통 LSTM Swipe만 사용 (app/models/ lstm_legacy)
             ("PPT", "Swipe_Left"): Key.right,
             ("PPT", "Swipe_Right"): Key.left,
-            # YouTube: 공통 LSTM 4종 제스처 → YouTube 단축키 (j 10초 뒤, l 10초 앞, k 재생·정지, m 음소거)
+            # YouTube: LSTM 6종 제스처 → YouTube 단축키 (j 10초 뒤, l 10초 앞, k 재생·정지, m 음소거)
             ("YOUTUBE", "Swipe_Left"): "j",
             ("YOUTUBE", "Swipe_Right"): "l",
-            ("YOUTUBE", "Pinch_Out"): "k",
-            ("YOUTUBE", "Pinch_In"): "m",
+            ("YOUTUBE", "Pinch_Out_Left"): "k",
+            ("YOUTUBE", "Pinch_Out_Right"): "k",
+            ("YOUTUBE", "Pinch_In_Left"): "m",
+            ("YOUTUBE", "Pinch_In_Right"): "m",
             # Game: 방향키 (크롬 등에서 방향키로 동작하는 게임 제어)
             ("GAME", "forward"): Key.up,
             ("GAME", "back"): Key.down,
@@ -76,7 +78,7 @@ class ModeController(QObject):
             pass
         self._last_game_keys = set()
 
-    def on_gesture(self, gesture_name: str, _cooldown_until: float = 0.0) -> None:
+    def on_gesture(self, gesture_name: str, _cooldown_until: float = 0.0, _probs: dict = None) -> None:
         """모드별 감지(ppt/game 등)에서 인식된 제스처 시 호출. 현재 모드 기준으로 pynput 키 입력.
         gesture_name에 '|'가 있으면 복수 제스처(예: 'forward|right')로 해석.
         GAME 모드: 방향이 바뀔 때만 즉시 이전 키 release 후 새 키 press (macOS Key Sticky 방지)."""

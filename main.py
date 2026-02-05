@@ -86,6 +86,8 @@ def main():
     # 모드별 감지 → Mode Controller (제스처 시 pynput 출력) + UI (인식된 제스처 표시)
     mode_detection.gesture_detected.connect(mode_controller.on_gesture)
     mode_detection.gesture_detected.connect(window.update_gesture)
+    if config.GESTURE_DEBUG:
+        mode_detection.gesture_debug_updated.connect(window.update_gesture_debug)
 
     # 카메라 오류
     def on_camera_error(msg):

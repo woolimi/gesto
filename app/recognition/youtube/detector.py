@@ -1,8 +1,8 @@
 """
 YouTube 모드 전용 감지.
-app/models/의 lstm_legacy.tflite 사용. 공통 LSTM 4종 제스처 모두 사용.
+app/models/의 lstm_legacy.tflite 사용. LSTM 6종 제스처 (Pinch 좌/우 분리).
 - Swipe_Left → 10초 뒤로, Swipe_Right → 10초 앞으로
-- Pinch_In → 음소거, Pinch_Out → 재생/정지
+- Pinch_In_Left/Right → 음소거, Pinch_Out_Left/Right → 재생/정지
 """
 
 from typing import Callable, Optional
@@ -12,7 +12,7 @@ from app.recognition.lstm_gesture_base import LstmGestureBase
 
 
 class YouTubeDetector:
-    """YouTube 모드: 공통 LSTM으로 4종 제스처 사용 — 10초 앞/뒤, 재생·정지, 음소거."""
+    """YouTube 모드: LSTM 6종 제스처 (Pinch 좌/우 분리) — 10초 앞/뒤, 재생·정지, 음소거."""
 
     def __init__(self, get_confidence_threshold: Optional[Callable[[], float]] = None):
         self._base = LstmGestureBase(
@@ -28,6 +28,11 @@ class YouTubeDetector:
     def cooldown_until(self) -> float:
         """쿨다운 종료 시각 (time.monotonic()). UI와 동기화용."""
         return self._base.cooldown_until if self._base is not None else 0.0
+
+    @property
+    def last_probs(self) -> dict:
+        """마지막 인식 시 모든 클래스별 확률. UI 표시용."""
+        return getattr(self._base, "last_probs", {}) if self._base else {}
 
     def close(self) -> None:
         if self._base is not None:

@@ -16,7 +16,7 @@ HAND_CONNECTIONS = [
 ]
 
 # 같은 포즈를 이만큼 유지해야 트리거 발생 (초)
-TRIGGER_HOLD_DURATION_SEC = 1.0
+TRIGGER_HOLD_DURATION_SEC = 3.0
 
 
 class TriggerResult(str, Enum):

@@ -24,21 +24,23 @@ CAMERA_FPS = 30
 # 제스처 인식 설정
 GESTURE_DETECTION_FPS = 30
 GESTURE_SEQUENCE_LENGTH = 30  # LSTM 입력 시퀀스 길이
+# True면 UI에 제스처별 확률·threshold 디버그 표시 (기존 UI 유지)
+GESTURE_DEBUG = True
 # 모드별 쿨다운(초). 제스처 인식 후 이 시간 동안 새 제스처 인식 안 함
 PPT_COOLDOWN_SEC = 1.5
 YOUTUBE_COOLDOWN_SEC = 2.0
 
 # 감도 설정 (0-100). UI 감도 → LSTM confidence threshold 매핑 (재훈련 불필요)
-SENSITIVITY_DEFAULT = 50
+SENSITIVITY_DEFAULT = 0
 SENSITIVITY_MIN = 0
 SENSITIVITY_MAX = 100
-# 감도 0(엄격) → threshold 0.92, 감도 100(쉽게) → threshold 0.4
-SENSITIVITY_THRESHOLD_MIN = 0.4
-SENSITIVITY_THRESHOLD_MAX = 0.92
+# 감도 0(엄격) → threshold 0.9, 감도 100(쉽게) → threshold 0.3
+SENSITIVITY_THRESHOLD_MIN = 0.90
+SENSITIVITY_THRESHOLD_MAX = 0.99
 
 
 def sensitivity_to_confidence_threshold(sensitivity: int) -> float:
-    """UI 감도 0~100을 LSTM 인식용 confidence threshold(0.4~0.92)로 변환 (V72)."""
+    """UI 감도 0~100을 LSTM 인식용 confidence threshold(0.80~0.99)로 변환."""
     sensitivity = max(0, min(100, sensitivity))
     return SENSITIVITY_THRESHOLD_MAX - (sensitivity / 100.0) * (
         SENSITIVITY_THRESHOLD_MAX - SENSITIVITY_THRESHOLD_MIN

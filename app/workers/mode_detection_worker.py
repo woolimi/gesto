@@ -18,6 +18,8 @@ class ModeDetectionWorker(QThread):
     """모션 감지 중일 때만 프레임을 받아, 현재 모드 감지기로 제스처/자세 판별. gesture_detected 시그널."""
 
     gesture_detected = pyqtSignal(str, float, float)  # (gesture_name, confidence, cooldown_until_monotonic)
+    # GESTURE_DEBUG 시 제스처별 확률·threshold 표시용 (매 프레임 LSTM 추론 후 emit)
+    gesture_debug_updated = pyqtSignal(dict, float)  # (probs, threshold)
 
     def __init__(
         self,
@@ -80,10 +82,18 @@ class ModeDetectionWorker(QThread):
                     gesture, confidence = result, 0.0 # Safety for old detectors
                 
                 # GAME 모드: 빈 제스처도 emit하여 방향 해제(release) 가능하도록 함
-                cooldown_until = (
-                    getattr(self._detector, "cooldown_until", 0.0) if gesture else 0.0
-                )
+                # 쿨다운 중에도 cooldown_until 전달 → UI에서 감지된 제스처 유지 후 종료 시 실시간으로 전환
+                cooldown_until = getattr(self._detector, "cooldown_until", 0.0)
                 self.gesture_detected.emit(gesture or "", confidence, cooldown_until)
+                # 디버그: 매 프레임 확률 전달. UI에서 쿨다운 중일 때만 갱신 생략해 제스처와 함께 유지
+                if config.GESTURE_DEBUG:
+                    probs = getattr(self._detector, "last_probs", None) or {}
+                    thr = (
+                        config.sensitivity_to_confidence_threshold(self._get_sensitivity())
+                        if self._get_sensitivity is not None
+                        else 0.0
+                    )
+                    self.gesture_debug_updated.emit(probs, thr)
         if self._detector is not None:
             self._detector.close()
             self._detector = None

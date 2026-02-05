@@ -779,6 +779,9 @@ class MainWindow(QMainWindow):
     def on_sensitivity_changed(self, value: int):
         self.sensitivity = value
         self.control_panel.set_sensitivity_label(value)
+        self.webcam_panel.gesture_display.set_threshold(
+            config.sensitivity_to_confidence_threshold(value)
+        )
         self.sensitivity_changed.emit(value)
 
     def on_mode_changed(self, mode: str):
@@ -816,7 +819,11 @@ class MainWindow(QMainWindow):
 
         if self.is_detecting:
             self.webcam_panel.gesture_display.update_status(
-                "", 
+                "감지 중",
                 gesture_name,
                 clear_at_monotonic=cooldown_until if cooldown_until > 0 else None,
             )
+
+    def update_gesture_debug(self, probs: dict, threshold: float):
+        """GESTURE_DEBUG 시 제스처별 확률·threshold 표시 (기존 UI 유지)."""
+        self.webcam_panel.gesture_display.set_debug_info(probs, threshold)

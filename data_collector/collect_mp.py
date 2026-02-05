@@ -8,7 +8,7 @@ import shutil
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QLineEdit, QComboBox, 
                              QPushButton, QMessageBox, QSpinBox, QSlider, QGroupBox, QFormLayout, QCheckBox)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, QEvent
 from PyQt6.QtGui import QImage, QPixmap
 
 # Ensure the project root is in the path
@@ -16,12 +16,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import config
 
-# 시나리오 매니저 임포트
+# 시나리오 매니저 및 허용 제스처 목록 임포트
 try:
-    from data_collector.scenario_definitions import ScenarioManager
+    from data_collector.scenario_definitions import ScenarioManager, SUPPORTED_GESTURES
 except ImportError:
-    # data_collector 디렉토리 내부에서 실행 시 폴백
-    from scenario_definitions import ScenarioManager
+    from scenario_definitions import ScenarioManager, SUPPORTED_GESTURES
 
 # 폰트 설정
 from PIL import ImageFont, ImageDraw, Image
@@ -107,9 +106,11 @@ class LegacyCollector(QMainWindow):
         # Controls
         controls_layout = QHBoxLayout()
         
-        self.gesture_name_input = QLineEdit()
-        self.gesture_name_input.setPlaceholderText("Enter Gesture Name")
-        controls_layout.addWidget(self.gesture_name_input)
+        self.gesture_name_combo = QComboBox()
+        self.gesture_name_combo.addItems(SUPPORTED_GESTURES)
+        self.gesture_name_combo.setMinimumWidth(140)
+        controls_layout.addWidget(QLabel("Gesture:"))
+        controls_layout.addWidget(self.gesture_name_combo)
         
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["Gesture", "Posture"])
@@ -215,11 +216,11 @@ class LegacyCollector(QMainWindow):
         self.status_label = QLabel("Ready")
         self.layout.addWidget(self.status_label)
         
-        # MediaPipe Setup
+        # MediaPipe Setup — 두 손 감지 (녹화 데이터: 42 랜드마크 = 손1 21 + 손2 21)
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
             static_image_mode=False,
-            max_num_hands=1,
+            max_num_hands=2,
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
         )
@@ -231,9 +232,9 @@ class LegacyCollector(QMainWindow):
         self.countdown_timer = QTimer()
         self.countdown_timer.timeout.connect(self.update_countdown)
         self.countdown_val = 5 # 3초 -> 5초로 변경 (요청사항)
-        self.record_duration = 1.5
+        self.record_duration = 1.0   # 1초(30프레임): 제스처에 집중, 주먹 등 대기 구간 영향 감소
         self.fps = 30
-        self.total_frames = int(self.record_duration * self.fps)
+        self.total_frames = int(self.record_duration * self.fps)  # 30
         
         # Auto-Loop State
         self.target_episodes = 0
@@ -251,6 +252,22 @@ class LegacyCollector(QMainWindow):
         self.thread = VideoThread()
         self.thread.change_pixmap_signal.connect(self.update_image)
         self.thread.start()
+
+        # z: 마지막 녹화 삭제 (이벤트 필터로 포커스 무관하게 감지)
+        QApplication.instance().installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        """포커스가 입력창 등에 있어도 'z' 한 번에 마지막 녹화 삭제."""
+        if event.type() == QEvent.Type.KeyPress:
+            is_z = (event.text() == "z") or (
+                event.key() == Qt.Key.Key_Z
+                and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            )
+            if is_z and self.isVisible():
+                if obj is self or (isinstance(obj, QWidget) and self.isAncestorOf(obj)):
+                    self.delete_last_recording()
+                    return True
+        return super().eventFilter(obj, event)
 
     def closeEvent(self, event):
         self.thread.stop()
@@ -305,10 +322,14 @@ class LegacyCollector(QMainWindow):
                         else:
                             self.status_label.setText(f"삭제됨: {os.path.basename(file_to_delete)}. (첫 단계입니다)")
                     else:
-                        # 일반 모드
+                        # 일반 모드: 에피소드 되돌린 뒤 타이머 재가동하여 해당 구간 재녹화
                         if self.current_episode > 0:
                             self.current_episode -= 1
-                        self.status_label.setText(f"삭제됨: {os.path.basename(file_to_delete)}. 에피소드 {self.current_episode + 1} 재개")
+                        self.status_label.setText(f"삭제됨: {os.path.basename(file_to_delete)}. 에피소드 {self.current_episode + 1} 재녹화 대기...")
+                        self.start_btn.setEnabled(False)
+                        self.toggle_inputs(False)
+                        self.countdown_timer.stop()
+                        self.start_countdown()
 
                     self.last_saved_file = self.recorded_files[-1] if self.recorded_files else None
                 except Exception as e:
@@ -339,7 +360,7 @@ class LegacyCollector(QMainWindow):
     def toggle_scenario_mode(self, state):
         self.is_scenario_mode = (state == Qt.CheckState.Checked.value or state == 2)
         if self.is_scenario_mode:
-            self.status_label.setText("Scenario Mode Enabled. Enter Gesture Name (e.g. Swipe_Left) and Start.")
+            self.status_label.setText("Scenario Mode Enabled. Select gesture and Start.")
             self.episode_count_input.setEnabled(False) # Controlled by scenario
         else:
             self.episode_count_input.setEnabled(True)
@@ -413,18 +434,21 @@ class LegacyCollector(QMainWindow):
                 cv2.putText(cv_img, episode_text, (10, 85), cv2.FONT_HERSHEY_SIMPLEX, scale_e, (255, 255, 255), thick_e)
             # ---------------
 
-            # Recording Logic inside the loop to ensure we capture processed frame data
+            # Recording Logic: 두 손 랜드마크 저장. 손 순서를 handedness로 고정 (Right=0~20, Left=21~41).
+            # 한손 주먹·한손 스와이프처럼 감지 순서가 바뀌어도 항상 같은 슬롯에 들어가도록 함.
             if self.is_recording:
-                frame_data = [] # 21 landmarks * 3 coords
-                if results.multi_hand_landmarks:
-                    # Take first hand
-                    hls = results.multi_hand_landmarks[0]
-                    for lm in hls.landmark:
-                        frame_data.append([lm.x, lm.y, lm.z])
-                else:
-                    # Fill with zeros if no hand
-                    frame_data = [[0.0, 0.0, 0.0] for _ in range(21)]
-                
+                zero_hand = [[0.0, 0.0, 0.0] for _ in range(21)]
+                right_slot = zero_hand.copy()
+                left_slot = zero_hand.copy()
+                if results.multi_hand_landmarks and results.multi_handedness:
+                    for hlm, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
+                        label = handedness.classification[0].label if handedness.classification else ""
+                        pts = [[lm.x, lm.y, lm.z] for lm in hlm.landmark]
+                        if label == "Right":
+                            right_slot = pts
+                        else:
+                            left_slot = pts
+                frame_data = right_slot + left_slot
                 self.recording_frames.append(frame_data)
                 
                 if len(self.recording_frames) >= self.total_frames:
@@ -479,31 +503,13 @@ class LegacyCollector(QMainWindow):
         return QPixmap.fromImage(p)
 
     def start_recording_sequence(self):
-        gesture_name = self.gesture_name_input.text().strip()
+        gesture_name = self.gesture_name_combo.currentText().strip()
         username = self.username_input.text().strip()
-        
-        # 1. 제스처 이름 검증
-        if not gesture_name:
-            QMessageBox.warning(self, "입력 오류", "제스처 이름을 입력해주세요 (예: Swipe_Left).")
+
+        if self.is_scenario_mode and not username:
+            QMessageBox.warning(self, "입력 오류", "사용자 이름(ID)을 입력해주세요.\n데이터 병합 시 충돌 방지를 위해 필요합니다.")
             return
 
-        # 2. 시나리오 모드 검증
-        if self.is_scenario_mode:
-            # 사용자 이름(ID) 필수 검증
-            if not username:
-                QMessageBox.warning(self, "입력 오류", "사용자 이름(ID)을 입력해주세요.\n데이터 병합 시 충돌 방지를 위해 필요합니다.")
-                return
-            
-            # 지원되는 제스처인지 확인
-            supported_gestures = self.scenario_manager.SUPPORTED_GESTURES
-            if gesture_name not in supported_gestures:
-                QMessageBox.warning(self, "입력 오류", f"시나리오 모드에서 지원되지 않는 제스처입니다.\n지원 목록: {', '.join(supported_gestures)}\n정확히 입력해주세요.")
-                return
-
-            # 지원되는 제스처인지 확인 (ScenarioManager가 0개를 반환하면 경고)
-            # 여기서는 일단 진행하고 아래에서 total_scenarios == 0일 때 처리함
-
-            
         self.target_episodes = self.episode_count_input.value()
 
 
@@ -528,7 +534,7 @@ class LegacyCollector(QMainWindow):
 
         
     def toggle_inputs(self, enabled):
-        self.gesture_name_input.setEnabled(enabled)
+        self.gesture_name_combo.setEnabled(enabled)
         self.episode_count_input.setEnabled(enabled)
         self.mode_combo.setEnabled(enabled)
         self.camera_group.setEnabled(enabled) # Optional: disable camera controls during recording
@@ -562,7 +568,7 @@ class LegacyCollector(QMainWindow):
         self.save_data()
 
     def save_data(self):
-        gesture_name = self.gesture_name_input.text().strip()
+        gesture_name = self.gesture_name_combo.currentText().strip()
         mode = self.mode_combo.currentText()
         
         # Base Data Dir: data_collector/data/Gesture/<gesture_name> 또는 data/Posture/...

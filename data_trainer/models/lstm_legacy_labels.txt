@@ -1,4 +1,6 @@
-Pinch_In
-Pinch_Out
+Pinch_In_Left
+Pinch_In_Right
+Pinch_Out_Left
+Pinch_Out_Right
 Swipe_Left
 Swipe_Right

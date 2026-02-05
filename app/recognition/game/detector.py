@@ -223,6 +223,11 @@ class GameDetector:
         ordered = sorted(directions, key=lambda x: _DIR_ORDER.index(x))
         return "|".join(ordered), 1.0
 
+    @property
+    def last_probs(self) -> dict:
+        """Game 모드는 LSTM 미사용. UI 호환용 빈 dict."""
+        return {}
+
     def close(self) -> None:
         if self._hands:
             self._hands.close()

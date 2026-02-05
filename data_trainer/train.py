@@ -19,9 +19,9 @@ MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'models'))
 # 앱이 로드하는 모델 경로 (학습 후 여기로 복사)
 APP_MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'app', 'models'))
 
-# 하이퍼파라미터
-SEQUENCE_LENGTH = 45  # 1.5초 * 30fps
-LANDMARKS_COUNT = 21
+# 하이퍼파라미터 — 두 손 녹화: 42 랜드마크 (손1 21 + 손2 21)
+SEQUENCE_LENGTH = 30  # 1초 * 30fps (제스처 구간에 집중, 한손 주먹·한손 스와이프 인식 개선)
+LANDMARKS_COUNT = 42
 COORDS_COUNT = 3
 INPUT_SHAPE = (SEQUENCE_LENGTH, LANDMARKS_COUNT * COORDS_COUNT)
 EPOCHS = 100  # Early stopping으로 실제로는 더 적게 학습될 수 있음
@@ -29,22 +29,22 @@ BATCH_SIZE = 16
 
 def normalize_landmarks(data):
     """
-    랜드마크 정규화: 손목(랜드마크 0)을 기준으로 상대 좌표로 변환
-    
-    Args:
-        data: (frames, 21, 3) shape의 numpy array
-    
-    Returns:
-        정규화된 데이터 (frames, 21, 3)
+    랜드마크 정규화: 손목(랜드마크 0, 21) 기준 상대 좌표. (frames, 21, 3) 또는 (frames, 42, 3).
     """
-    # 손목 좌표를 기준으로 상대 좌표 변환
-    wrist = data[:, 0:1, :]  # (frames, 1, 3)
-    normalized = data - wrist  # 손목 기준 상대 좌표
-    
-    # 스케일 정규화 (손 크기 차이 보정)
-    scale = np.max(np.abs(normalized), axis=(1, 2), keepdims=True) + 1e-6
-    normalized = normalized / scale
-    
+    n_landmarks = data.shape[1]
+    if n_landmarks == 21:
+        wrist = data[:, 0:1, :]
+        normalized = data - wrist
+        scale = np.max(np.abs(normalized), axis=(1, 2), keepdims=True) + 1e-6
+        return (normalized / scale).astype(np.float32)
+    # 42: 손마다 손목 기준 정규화
+    normalized = np.zeros_like(data, dtype=np.float32)
+    for start in (0, 21):
+        end = start + 21
+        wrist = data[:, start : start + 1, :]
+        part = data[:, start:end, :] - wrist
+        scale = np.max(np.abs(part), axis=(1, 2), keepdims=True) + 1e-6
+        normalized[:, start:end, :] = part / scale
     return normalized
 
 def load_data(data_dir, apply_normalization=True):
@@ -98,21 +98,19 @@ def load_data(data_dir, apply_normalization=True):
                     file_path = os.path.join(gesture_path, file)
                     try:
                         data = np.load(file_path)
-                        # 데이터 모양은 (Frames, 21, 3)
-                        
-                        # 정규화 적용
+                        # 데이터 모양: (Frames, 21, 3) 또는 (Frames, 42, 3). 21이면 42로 패딩.
+                        if data.shape[1] == 21:
+                            pad = np.zeros((data.shape[0], 21, 3), dtype=data.dtype)
+                            data = np.concatenate([data, pad], axis=1)  # (T, 42, 3)
+                        if data.shape[1] != LANDMARKS_COUNT or data.shape[2] != 3:
+                            continue
                         if apply_normalization:
                             data = normalize_landmarks(data)
-                        
-                        # SEQUENCE_LENGTH 프레임을 갖도록 보장
                         if data.shape[0] > SEQUENCE_LENGTH:
                             data = data[:SEQUENCE_LENGTH]
                         elif data.shape[0] < SEQUENCE_LENGTH:
-                            # 0으로 패딩
-                            padding = np.zeros((SEQUENCE_LENGTH - data.shape[0], 21, 3))
+                            padding = np.zeros((SEQUENCE_LENGTH - data.shape[0], LANDMARKS_COUNT, 3), dtype=data.dtype)
                             data = np.vstack((data, padding))
-                        
-                        # 랜드마크 평탄화: (45, 21, 3) -> (45, 63)
                         data_flat = data.reshape(SEQUENCE_LENGTH, -1)
                         
                         X.append(data_flat)
@@ -159,8 +157,8 @@ def audit_legacy_data(data_dir):
             if npy_files:
                 try:
                     one = np.load(os.path.join(gpath, npy_files[0]))
-                    if one.ndim != 3 or one.shape[1] != 21 or one.shape[2] != 3:
-                        issues.append(f"{gesture}: shape 기대 (T, 21, 3), 실제 {one.shape}")
+                    if one.ndim != 3 or one.shape[2] != 3 or one.shape[1] not in (21, 42):
+                        issues.append(f"{gesture}: shape 기대 (T, 21|42, 3), 실제 {one.shape}")
                     if one.shape[0] < 5:
                         issues.append(f"{gesture}: 프레임 수 너무 적음 ({one.shape[0]})")
                 except Exception as e:
@@ -460,9 +458,12 @@ def main():
     print("="*70)
     
     print("\n📂 Legacy 데이터 로딩 중...")
+    print(f"   기대 입력 shape: (N, {SEQUENCE_LENGTH}, {LANDMARKS_COUNT * COORDS_COUNT}) = (N, 30, 126) [양손 42 랜드마크]")
     audit_legacy_data(DATA_DIR)
     X_legacy, y_legacy, label_map_legacy = load_data(DATA_DIR, apply_normalization=True)
     print(f"✅ Legacy 데이터: {X_legacy.shape}, 클래스: {list(label_map_legacy.keys())}")
+    if len(X_legacy) > 0 and X_legacy.shape[1:] != INPUT_SHAPE:
+        print(f"   ⚠️ 입력 shape 불일치: 기대 {INPUT_SHAPE}, 실제 {X_legacy.shape[1:]}")
     print_class_distribution(y_legacy, label_map_legacy)
 
     # Train Legacy
