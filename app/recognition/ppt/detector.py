@@ -21,11 +21,11 @@ class PPTDetector:
             cooldown_sec=config.PPT_COOLDOWN_SEC,
         )
 
-    def process(self, frame_bgr) -> Optional[str]:
-        gesture = self._base.process(frame_bgr)
+    def process(self, frame_bgr) -> tuple[Optional[str], float]:
+        gesture, confidence = self._base.process(frame_bgr)
         if gesture in self._SWIPE_ONLY:
-            return gesture
-        return None
+            return gesture, confidence
+        return None, 0.0
 
     @property
     def cooldown_until(self) -> float:

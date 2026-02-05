@@ -14,6 +14,8 @@ class TriggerWorker(QThread):
 
     trigger_start = pyqtSignal()
     trigger_stop = pyqtSignal()
+    trigger_aot_on = pyqtSignal()
+    trigger_aot_off = pyqtSignal()
     frame_annotated = pyqtSignal(object)  # QImage — 손 랜드마크가 그려진 프레임
 
     def __init__(self, parent=None):
@@ -22,6 +24,7 @@ class TriggerWorker(QThread):
         self._frame_queue = queue.Queue(maxsize=2)
         self._running = True
         self._motion_active = False  # 모션 인식 중이면 True (종료 제스처만 판단)
+        self._current_mode = "GAME"
 
     def enqueue_frame(self, frame_bgr):
         """메인/카메라 스레드에서 호출. 프레임을 큐에 넣음."""
@@ -33,6 +36,10 @@ class TriggerWorker(QThread):
     def set_motion_active(self, active: bool):
         """버튼 등으로 감지 상태가 바뀔 때 호출. 랜드마크 색(파랑/회색) 동기화용."""
         self._motion_active = active
+
+    def set_current_mode(self, mode: str):
+        """현재 앱의 모드를 동기화. PPT 모드에서만 AOT 제스처 허용 위함."""
+        self._current_mode = mode
 
     def run(self):
         while self._running:
@@ -49,6 +56,12 @@ class TriggerWorker(QThread):
             elif result == TriggerResult.STOP:
                 self.trigger_stop.emit()
                 self._motion_active = False
+            elif result == TriggerResult.ALWAYS_ON_TOP_ON:
+                if self._current_mode == "PPT":
+                    self.trigger_aot_on.emit()
+            elif result == TriggerResult.ALWAYS_ON_TOP_OFF:
+                if self._current_mode == "PPT":
+                    self.trigger_aot_off.emit()
             h, w, ch = annotated.shape
             bytes_per_line = ch * w
             qimage = QImage(annotated.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
