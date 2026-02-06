@@ -31,7 +31,7 @@ class GestureDisplayWidget(QWidget):
         # self.status_label = ...
 
         # Gesture Label (e.g., "인식된 제스처: ...")
-        self.gesture_label = QLabel("동작 감지가 시작되지 않았습니다")
+        self.gesture_label = QLabel("")
         self.gesture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.gesture_label.setFont(QFont("Arial", 11))
         self.gesture_label.setStyleSheet(f"color: {config.COLOR_TEXT_SECONDARY}; background-color: transparent;")
@@ -141,7 +141,7 @@ class GestureDisplayWidget(QWidget):
             if self._clear_timer is not None:
                 self._clear_timer.stop()
                 self._clear_timer = None
-            self.gesture_label.setText("동작 감지가 시작되지 않았습니다")
+            self.gesture_label.setText("")
             
         elif gesture:
             self._last_gesture = gesture
@@ -160,7 +160,7 @@ class GestureDisplayWidget(QWidget):
             if self._last_gesture is not None:
                 pass 
             else:
-                self.gesture_label.setText("제스처가 인식되지 않았습니다")
+                self.gesture_label.setText("")
         
         # 마지막에 폰트 및 스타일 업데이트
         self._update_font_scaling()

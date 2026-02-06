@@ -464,7 +464,7 @@ class MainWindow(QMainWindow):
 
         # 2. Camera Panel (AR View)
         self.webcam_panel = WebcamPanelWidget()
-        content_layout.addWidget(self.webcam_panel, 12) 
+        content_layout.addWidget(self.webcam_panel, 15) 
         
         # 3. Accuracy Gauge
         gauge_container = QHBoxLayout()
@@ -472,7 +472,7 @@ class MainWindow(QMainWindow):
         self.accuracy_gauge = AccuracyGauge()
         gauge_container.addWidget(self.accuracy_gauge)
         gauge_container.addStretch()
-        content_layout.addLayout(gauge_container, 4) 
+        content_layout.addLayout(gauge_container, 5) 
         
         self.div_bottom = QFrame()
         self.div_bottom.setFrameShape(QFrame.Shape.HLine)
