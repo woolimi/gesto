@@ -1,8 +1,8 @@
 SUPPORTED_GESTURES = [
     "Pinch_In_Left", "Pinch_In_Right",
     "Pinch_Out_Left", "Pinch_Out_Right",
+    "Play_Pause_Left", "Play_Pause_Right",
     "Swipe_Left", "Swipe_Right",
-    "Unknown",  # 인식 불명/기타 자세 학습용 (모션 인식 시 동작 없음)
 ]
 
 
@@ -21,6 +21,7 @@ class ScenarioManager:
         """
         Generates scenarios for a given gesture name.
         - Pinch_*_Left/Right: 거리 × 위치 × 6회 = 54단계 (손은 제스처명에 따라 고정)
+        - Play_Pause_Left/Right: 거리 × 위치 × 6회 = 54단계 (손은 제스처명에 따라 고정)
         - Swipe_Left, Swipe_Right: 거리 × 위치 × 6회 = 54단계 (Swipe_Left=오른손, Swipe_Right=왼손)
         """
         self.gesture_name = gesture_name
@@ -30,19 +31,15 @@ class ScenarioManager:
         if gesture_name not in self.SUPPORTED_GESTURES:
             self.total_scenarios = 0
             return
-        if gesture_name == "Unknown":
-            # Unknown은 시나리오 없이 수동 에피소드로만 수집
-            self.total_scenarios = 0
-            return
 
         distances = [70, 140, 200]
         positions = ["Top", "Center", "Bottom"]  # 상단, 중앙, 하단
         reps = 6
 
         # 제스처별 손 고정 (훈련용으로 좌/우 분리)
-        if gesture_name in ("Pinch_In_Left", "Pinch_Out_Left"):
+        if gesture_name in ("Pinch_In_Left", "Pinch_Out_Left", "Play_Pause_Left"):
             hands = ["Left"]
-        elif gesture_name in ("Pinch_In_Right", "Pinch_Out_Right"):
+        elif gesture_name in ("Pinch_In_Right", "Pinch_Out_Right", "Play_Pause_Right"):
             hands = ["Right"]
         elif gesture_name == "Swipe_Left":
             hands = ["Right"]

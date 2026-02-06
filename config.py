@@ -89,6 +89,8 @@ GESTURE_DISPLAY_MAP = {
     "Pinch_Out_Right": "전체 화면 📺",
     "Pinch_In_Left": "최소화 ⬇️",
     "Pinch_In_Right": "최소화 ⬇️",
+    "Play_Pause_Left": "재생/일시정지 ⏯️",
+    "Play_Pause_Right": "재생/일시정지 ⏯️",
     "forward": "전진 ⬆️",
     "back": "후진 ⬇️",
     "left": "좌회전 ⬅️",
@@ -114,8 +116,19 @@ GESTURE_ACTION_MAP = {
     "YOUTUBE": {
         "Swipe_Left": "j",
         "Swipe_Right": "l",
-        "Pinch_Out": "k",
-        "Pinch_In": "m",
+        # Backward compatibility (구형 모델/이름 정규화)
+        "Pinch_Out": "k",  # play/pause
+        "Pinch_In": "m",   # mute
+
+        # Legacy LSTM labels (좌/우 분리)
+        "Pinch_Out_Left": "k",
+        "Pinch_Out_Right": "k",
+        "Pinch_In_Left": "m",
+        "Pinch_In_Right": "m",
+
+        # New explicit play/pause gestures (좌/우 분리)
+        "Play_Pause_Left": "k",
+        "Play_Pause_Right": "k",
     },
     "GAME": {
         "forward": "up",
