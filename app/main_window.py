@@ -623,7 +623,7 @@ class MainWindow(QMainWindow):
                 cp.toggle_button.setIcon(QIcon())
                 cp.set_detection_state(self.is_detecting)
                 
-            cp.setFixedHeight(max(30, int(60 * scale)))
+            cp.setFixedHeight(max(35, int(90 * scale)))
             
             m = 2 if is_micro else int(10*scale)
             cp.layout().setContentsMargins(m, 2, m, 2)

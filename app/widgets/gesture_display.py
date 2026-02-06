@@ -107,6 +107,11 @@ class GestureDisplayWidget(QWidget):
                 f"border-radius: {radius}px; padding: {padding}px {padding*3}px;"
             )
 
+    def set_threshold(self, threshold: float):
+        """Main Window에서 호출: 현재 감도 기준 임계값 업데이트."""
+        self._current_threshold = threshold
+
+
     def _clear_gesture_label(self):
         """쿨다운 종료 시점에 호출: 인식된 제스처·디버그 라벨 초기화 후 실시간 반영 모드로 전환."""
         self._clear_timer = None
