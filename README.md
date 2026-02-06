@@ -6,12 +6,12 @@
 
 웹캠과 제스처만으로 PPT와 유투브를 제어하는 도구.
 
-## 1. 프로젝트 개요
+## 프로젝트 개요
 
 - **기술 스택** : Mediapipe, LSTM, PyAutoGui, PyQT6
 - **타겟 유저** : 리모컨을 잃어버린 발표자, 귀차니즘이 많은 영화광
 
-## 2. 기능
+## 기능
 
 | 카테고리 | 기능 | 제스처 |
 |---------|------|--------|
@@ -76,6 +76,19 @@ main.py
 
 - [정적 제스처 등록 방법](GESTURE_GUIDE.md#정적-제스처-static-gesture-등록)
 - [동적 제스처 등록 방법](GESTURE_GUIDE.md#동적-제스처-dynamic-gesture-등록)
+
+## Hugginface data 가져오기
+
+```bash
+# git xet 설치가 안되있으면 설치
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/huggingface/xet-core/refs/heads/main/git_xet/install.sh | sh
+
+# 폴더로 이동
+cd data_collector
+# 데이터 가져오기
+git clone git@hf.co:datasets/dnt-addinedu/data
+```
+
 
 ## 기여자
 
