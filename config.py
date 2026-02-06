@@ -116,15 +116,12 @@ GESTURE_ACTION_MAP = {
     "YOUTUBE": {
         "Swipe_Left": "j",
         "Swipe_Right": "l",
-        # Backward compatibility (구형 모델/이름 정규화)
-        "Pinch_Out": "k",  # play/pause
-        "Pinch_In": "m",   # mute
 
         # Legacy LSTM labels (좌/우 분리)
-        "Pinch_Out_Left": "k",
-        "Pinch_Out_Right": "k",
-        "Pinch_In_Left": "m",
-        "Pinch_In_Right": "m",
+        "Pinch_Out_Left": "f",
+        "Pinch_Out_Right": "f",
+        "Pinch_In_Left": "esc",
+        "Pinch_In_Right": "esc",
 
         # New explicit play/pause gestures (좌/우 분리)
         "Play_Pause_Left": "k",
