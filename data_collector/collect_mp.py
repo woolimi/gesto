@@ -2,6 +2,7 @@ import sys
 import os
 import cv2
 import time
+import threading
 import numpy as np
 import mediapipe as mp
 import shutil
@@ -58,7 +59,18 @@ class VideoThread(QThread):
     def __init__(self):
         super().__init__()
         self._run_flag = True
-        self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
+        self._lock = threading.Lock()
+        self._latest_frame = None  # keep only the newest frame (drop backlog)
+
+        # On Linux, using V4L2 backend tends to reduce capture jitter/latency.
+        if sys.platform == "linux":
+            cap = cv2.VideoCapture(config.CAMERA_INDEX, cv2.CAP_V4L2)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(config.CAMERA_INDEX)
+            self.cap = cap
+        else:
+            self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
+
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
         self.cap.set(cv2.CAP_PROP_FPS, config.CAMERA_FPS)
@@ -66,20 +78,25 @@ class VideoThread(QThread):
     def set_camera_property(self, prop_id, value):
         if self.cap.isOpened():
             self.cap.set(prop_id, value)
+
+    def get_latest_frame(self):
+        """Return the most recent frame and clear the buffer (frame dropping)."""
+        with self._lock:
+            frame = self._latest_frame
+            self._latest_frame = None
+        return frame
         
     def run(self):
         while self._run_flag:
-            start_time = time.time()
             ret, cv_img = self.cap.read()
             if ret:
                 # 거울 모드 (좌우 반전)
                 cv_img = cv2.flip(cv_img, 1)
-                self.change_pixmap_signal.emit(cv_img)
-            
-            # 30 FPS 유지
-            elapsed = time.time() - start_time
-            delay = max(0.001, 0.033 - elapsed)
-            time.sleep(delay)
+                with self._lock:
+                    self._latest_frame = cv_img
+
+            # Yield a bit to avoid burning 100% CPU if the camera is fast.
+            time.sleep(0.001)
             
     def stop(self):
         self._run_flag = False
@@ -215,11 +232,23 @@ class LegacyCollector(QMainWindow):
 
         self.status_label = QLabel("Ready")
         self.layout.addWidget(self.status_label)
+
+        # Performance knobs (Ubuntu tends to be CPU-bound)
+        self._is_linux = (sys.platform == "linux")
+        self._mp_every_n = 2 if self._is_linux else 1  # run inference every N frames (display can still be 30fps)
+        self._mp_tick = 0
+        self._mp_cached_results = None
+        self._display_max_width = 640 if self._is_linux else None  # downscale display/processing on Ubuntu
+        self._font_cache = {}  # (size) -> ImageFont
+        self._scenario_header_cache_key = None
+        self._scenario_header_cache_img = None
+        self._zero_hand = [[0.0, 0.0, 0.0] for _ in range(21)]
         
         # MediaPipe Setup — 두 손 감지 (녹화 데이터: 42 랜드마크 = 손1 21 + 손2 21)
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
             static_image_mode=False,
+            model_complexity=0 if self._is_linux else 1,
             max_num_hands=2,
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
@@ -250,11 +279,21 @@ class LegacyCollector(QMainWindow):
         
         # Video Thread
         self.thread = VideoThread()
-        self.thread.change_pixmap_signal.connect(self.update_image)
         self.thread.start()
+
+        # Render loop: pull latest frame at a steady rate (prevents Qt signal backlog stutter)
+        self.render_timer = QTimer()
+        self.render_timer.timeout.connect(self.render_loop)
+        self.render_timer.start(int(1000 / self.fps))
 
         # z: 마지막 녹화 삭제 (이벤트 필터로 포커스 무관하게 감지)
         QApplication.instance().installEventFilter(self)
+
+    def render_loop(self):
+        frame = self.thread.get_latest_frame()
+        if frame is None:
+            return
+        self.update_image(frame)
 
     def eventFilter(self, obj, event):
         """포커스가 입력창 등에 있어도 'z' 한 번에 마지막 녹화 삭제."""
@@ -270,6 +309,8 @@ class LegacyCollector(QMainWindow):
         return super().eventFilter(obj, event)
 
     def closeEvent(self, event):
+        if hasattr(self, "render_timer"):
+            self.render_timer.stop()
         self.thread.stop()
         self.hands.close()
         event.accept()
@@ -366,10 +407,11 @@ class LegacyCollector(QMainWindow):
             self.episode_count_input.setEnabled(True)
             self.status_label.setText("Scenario Mode Disabled.")
 
-    def put_text_korean(self, img, text, position, font_size, color):
-        img_pil = Image.fromarray(img)
-        draw = ImageDraw.Draw(img_pil)
+    def _get_korean_font(self, font_size: int):
         size = int(font_size * FONT_SIZE_SCALE)
+        if size in self._font_cache:
+            return self._font_cache[size]
+
         try:
             if FONT_PATH and os.path.exists(FONT_PATH):
                 font = ImageFont.truetype(FONT_PATH, size)
@@ -377,8 +419,31 @@ class LegacyCollector(QMainWindow):
                 font = ImageFont.load_default()
         except Exception:
             font = ImageFont.load_default()
+
+        self._font_cache[size] = font
+        return font
+
+    def put_text_korean(self, img, text, position, font_size, color):
+        img_pil = Image.fromarray(img)
+        draw = ImageDraw.Draw(img_pil)
+        font = self._get_korean_font(font_size)
         draw.text(position, text, font=font, fill=color)
         return np.array(img_pil)
+
+    def _get_scenario_header_overlay(self, width: int, prog_text: str, inst_text: str, status: str):
+        """Cache-render the top 100px overlay with Korean text (PIL is expensive per-frame)."""
+        key = (width, prog_text, inst_text, status)
+        if key == self._scenario_header_cache_key and self._scenario_header_cache_img is not None:
+            return self._scenario_header_cache_img
+
+        header = np.zeros((100, width, 3), dtype=np.uint8)
+        header = self.put_text_korean(header, prog_text, (20, 15), 16, (200, 200, 200))
+        header = self.put_text_korean(header, inst_text, (20, 45), 32, (0, 255, 0))
+        header = self.put_text_korean(header, status, (width - 200, 30), 24, (255, 0, 0))
+
+        self._scenario_header_cache_key = key
+        self._scenario_header_cache_img = header
+        return header
 
 
     def update_image(self, cv_img):
@@ -386,13 +451,36 @@ class LegacyCollector(QMainWindow):
         if cv_img is None:
             return
 
+        # Downscale on Linux to reduce CPU load (display + MediaPipe)
+        if self._display_max_width is not None:
+            h, w = cv_img.shape[:2]
+            if w > self._display_max_width:
+                scale = self._display_max_width / float(w)
+                new_w = self._display_max_width
+                new_h = max(1, int(h * scale))
+                cv_img = cv2.resize(cv_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
         img_rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
         
         try:
-            results = self.hands.process(img_rgb)
+            # Run MediaPipe inference less frequently for preview (but ALWAYS during recording).
+            self._mp_tick += 1
+            do_infer = self.is_recording or (self._mp_every_n <= 1) or (self._mp_tick % self._mp_every_n == 0) or (self._mp_cached_results is None)
+
+            if do_infer:
+                mp_rgb = img_rgb
+                # Further downscale only for inference if frame is still large.
+                if self._is_linux:
+                    mh, mw = mp_rgb.shape[:2]
+                    if mw > 640:
+                        scale = 640 / float(mw)
+                        mp_rgb = cv2.resize(mp_rgb, (640, max(1, int(mh * scale))), interpolation=cv2.INTER_AREA)
+                self._mp_cached_results = self.hands.process(mp_rgb)
+
+            results = self._mp_cached_results
             
             # Draw Landmarks
-            if results.multi_hand_landmarks:
+            if results and results.multi_hand_landmarks:
                 for hand_landmarks in results.multi_hand_landmarks:
                     self.mp_drawing.draw_landmarks(
                         cv_img, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
@@ -437,10 +525,9 @@ class LegacyCollector(QMainWindow):
             # Recording Logic: 두 손 랜드마크 저장. 손 순서를 handedness로 고정 (Right=0~20, Left=21~41).
             # 한손 주먹·한손 스와이프처럼 감지 순서가 바뀌어도 항상 같은 슬롯에 들어가도록 함.
             if self.is_recording:
-                zero_hand = [[0.0, 0.0, 0.0] for _ in range(21)]
-                right_slot = zero_hand.copy()
-                left_slot = zero_hand.copy()
-                if results.multi_hand_landmarks and results.multi_handedness:
+                right_slot = self._zero_hand
+                left_slot = self._zero_hand
+                if results and results.multi_hand_landmarks and results.multi_handedness:
                     for hlm, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
                         label = handedness.classification[0].label if handedness.classification else ""
                         pts = [[lm.x, lm.y, lm.z] for lm in hlm.landmark]
@@ -457,27 +544,27 @@ class LegacyCollector(QMainWindow):
             # --- SCENARIO OVERLAY ---
             # 시나리오 모드일 때 HUD 그리기 (녹화 중이 아닐 때)
             if self.is_scenario_mode and not self.is_recording:
-                # 1. 배경
-                cv2.rectangle(cv_img, (0, 0), (cv_img.shape[1], 100), (0, 0, 0), -1)
-                
-                # 2. 텍스트 정보 가져오기
                 prog_text = self.scenario_manager.get_progress_text()
                 inst_text = self.scenario_manager.get_instruction_text()
-                
-                # 3. 텍스트 그리기 (폰트 크기 조정됨)
-                cv_img = self.put_text_korean(cv_img, prog_text, (20, 15), 16, (200, 200, 200)) 
-                cv_img = self.put_text_korean(cv_img, inst_text, (20, 45), 32, (0, 255, 0))     
-                
-                status = "REC" if self.is_recording else "READY"
-                # 카운트다운 중이면 카운트다운 표시
+
+                status = "READY"
                 if self.countdown_timer.isActive():
-                    # 중앙에 큰 글씨로 카운트다운
-                    h, w, c = cv_img.shape
-                    # 대략적인 중앙 위치
-                    cv_img = self.put_text_korean(cv_img, str(self.countdown_val), (w//2 - 50, h//2 - 50), 100, (255, 255, 0))
                     status = f"COUNT: {self.countdown_val}"
 
-                cv_img = self.put_text_korean(cv_img, status, (cv_img.shape[1]-150, 30), 24, (255, 0, 0)) 
+                # Cached top header (Korean text)
+                header = self._get_scenario_header_overlay(cv_img.shape[1], prog_text, inst_text, status)
+                cv_img[0:header.shape[0], 0:header.shape[1]] = header
+
+                # Countdown number in the center (digits only -> use OpenCV, cheaper than PIL)
+                if self.countdown_timer.isActive():
+                    h, w, _ = cv_img.shape
+                    scale = 4.0 * FONT_SIZE_SCALE
+                    thickness = max(3, int(6 * FONT_SIZE_SCALE))
+                    text = str(self.countdown_val)
+                    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
+                    x = max(0, (w - tw) // 2)
+                    y = max(th + 10, (h + th) // 2)
+                    cv2.putText(cv_img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 255, 255), thickness)
             # ------------------------
 
 
@@ -495,11 +582,17 @@ class LegacyCollector(QMainWindow):
         self.video_label.setPixmap(qt_img)
 
     def convert_cv_qt(self, cv_img):
-        rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb_image.shape
+        # BGR888 avoids an extra cvtColor (cheaper on CPU-bound Linux boxes).
+        cv_img = np.ascontiguousarray(cv_img)
+        h, w, ch = cv_img.shape
         bytes_per_line = ch * w
-        convert_to_Qt_format = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-        p = convert_to_Qt_format.scaled(640, 480, Qt.AspectRatioMode.KeepAspectRatio)
+        convert_to_Qt_format = QImage(cv_img.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
+        p = convert_to_Qt_format.scaled(
+            640,
+            480,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.FastTransformation,
+        )
         return QPixmap.fromImage(p)
 
     def start_recording_sequence(self):
