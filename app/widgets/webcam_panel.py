@@ -54,7 +54,11 @@ class WebcamPanelWidget(QGroupBox):
         self.neon_frame.setMinimumSize(10, 10)
         self.cam_layout.addWidget(self.neon_frame)
         
+        # Gesture Display Widget
+        self.gesture_display = GestureDisplayWidget()
+        
         self.main_layout.addWidget(self.camera_container, 1)
+        self.main_layout.addWidget(self.gesture_display)
         self.setLayout(self.main_layout)
 
     def resizeEvent(self, event):

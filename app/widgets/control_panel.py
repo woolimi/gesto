@@ -190,6 +190,7 @@ class ControlPanelWidget(QWidget):
         super().__init__(parent)
         self.sensitivity_value = config.SENSITIVITY_DEFAULT
         self.current_scale = 1.0
+        self.setObjectName("ControlPanel")
         self.init_ui()
 
     def update_scaling(self, scale):
@@ -234,12 +235,11 @@ class ControlPanelWidget(QWidget):
         layout.setSpacing(30)
 
         self.setStyleSheet(f"""
-            QWidget {{
+            #ControlPanel {{
                 background-color: rgba(20, 20, 30, 210);
                 border: 1px solid rgba(0, 255, 255, 60);
                 border-radius: 20px;
                 font-family: '{config.FONT_MAIN}', sans-serif;
-                min-height: 30px;
             }}
         """)
 
