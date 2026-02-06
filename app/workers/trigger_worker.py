@@ -25,6 +25,7 @@ class TriggerWorker(QThread):
         self._running = True
         self._motion_active = False  # 모션 인식 중이면 True (종료 제스처만 판단)
         self._current_mode = "GAME"
+        self._aot_active = False
 
     def enqueue_frame(self, frame_bgr):
         """메인/카메라 스레드에서 호출. 프레임을 큐에 넣음."""
@@ -57,11 +58,13 @@ class TriggerWorker(QThread):
                 self.trigger_stop.emit()
                 self._motion_active = False
             elif result == TriggerResult.ALWAYS_ON_TOP_ON:
-                if self._current_mode == "PPT":
+                if self._current_mode == "PPT" and not self._aot_active:
                     self.trigger_aot_on.emit()
+                    self._aot_active = True
             elif result == TriggerResult.ALWAYS_ON_TOP_OFF:
-                if self._current_mode == "PPT":
+                if self._current_mode == "PPT" and self._aot_active:
                     self.trigger_aot_off.emit()
+                    self._aot_active = False
             h, w, ch = annotated.shape
             bytes_per_line = ch * w
             qimage = QImage(annotated.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)

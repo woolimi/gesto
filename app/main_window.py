@@ -17,13 +17,16 @@ import config
 from app.widgets import LogoWidget, WebcamPanelWidget, ControlPanelWidget
 from app.widgets.animated_background import AuroraGradientBackground
 from app.widgets.accuracy_gauge import AccuracyGauge
+from app.widgets.gesture_display import GestureDisplayWidget
+from app.workers.sound_worker import play_ui_click
 
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
         self.setWindowTitle("설정")
-        self.setFixedSize(500, 650)
+        # Aggressively enlarged from 500x650
+        self.setFixedSize(650, 850)
         
         if parent:
             parent_geo = parent.geometry()
@@ -37,34 +40,34 @@ class SettingsDialog(QDialog):
                 color: white;
                 border: 1px solid #00FFFF;
                 border-radius: 10px;
-                font-family: 'Michroma', 'Black Han Sans', 'Noto Sans KR', sans-serif;
+                font-family: 'Giants Inline', 'Michroma', sans-serif;
             }
-            QLabel { color: #CCCCCC; font-size: 14px; font-family: 'Michroma', 'Black Han Sans', 'Noto Sans KR'; }
+            QLabel { color: #CCCCCC; font-size: 18px; font-family: '{config.FONT_MAIN}', 'Michroma', sans-serif; }
             QComboBox {
                 background-color: rgba(255, 255, 255, 20);
                 color: white;
                 border: 1px solid rgba(0, 255, 255, 50);
                 padding: 5px;
                 border-radius: 5px;
-                font-family: 'Michroma', 'Black Han Sans', 'Noto Sans KR';
+                font-family: '{config.FONT_MAIN}', 'Michroma', sans-serif;
             }
             QComboBox QAbstractItemView {
                 background-color: #101020;
                 color: white;
                 selection-background-color: #00FFFF;
                 selection-color: black;
-                font-family: 'Michroma', 'Black Han Sans', 'Noto Sans KR';
+                font-family: '{config.FONT_MAIN}', 'Michroma', sans-serif;
             }
             QPushButton {
-                background-color: rgba(0, 255, 255, 30);
-                color: #00FFFF;
-                border: 1px solid #00FFFF;
-                padding: 8px;
-                border-radius: 5px;
-                font-family: 'Audiowide', 'Black Han Sans', 'Noto Sans KR';
-                letter-spacing: 2px;
-                text-transform: uppercase;
-            }
+                 background-color: rgba(0, 255, 255, 30);
+                 color: #00FFFF;
+                 border: 1px solid #00FFFF;
+                 padding: 8px;
+                 border-radius: 5px;
+                 font-family: 'Giants Inline', 'Audiowide', sans-serif;
+                 letter-spacing: 2px;
+                 text-transform: uppercase;
+             }
             QPushButton:hover {
                 background-color: rgba(0, 255, 255, 60);
             }
@@ -76,7 +79,7 @@ class SettingsDialog(QDialog):
         
         # Header
         header = QLabel("시스템 설정")
-        header.setStyleSheet("font-size: 18px; font-weight: bold; color: #00FFFF; font-family: 'Audiowide', 'Black Han Sans', 'Noto Sans KR'; letter-spacing: 3px;")
+        header.setStyleSheet(f"font-size: 26px; font-weight: bold; color: #00FFFF; font-family: '{config.FONT_MAIN}', 'Audiowide', sans-serif; letter-spacing: 5px;")
         layout.addWidget(header)
         
         form_layout = QFormLayout()
@@ -93,7 +96,7 @@ class SettingsDialog(QDialog):
         layout.addLayout(form_layout)
         
         res_label = QLabel("해상도 강제 설정:")
-        res_label.setStyleSheet("color: #00FFFF; font-weight: bold; margin-top: 10px;")
+        res_label.setStyleSheet(f"color: #00FFFF; font-weight: bold; margin-top: 10px; font-family: '{config.FONT_MAIN}', sans-serif;")
         layout.addWidget(res_label)
         
         res_grid = QGridLayout()
@@ -120,19 +123,61 @@ class SettingsDialog(QDialog):
                     border-radius: 8px;
                     color: white;
                     font-weight: bold;
+                    font-family: '{config.FONT_MAIN}', sans-serif;
                 }
                 QPushButton:hover {
                     background-color: rgba(0, 255, 255, 50);
                     border: 2px solid #00FFFF;
                 }
             """)
+            btn.clicked.connect(play_ui_click)
             btn.clicked.connect(lambda checked, w=w, h=h: self._set_resolution(w, h))
             res_grid.addWidget(btn, i // 2, i % 2)
             
         layout.addLayout(res_grid)
+        
+        # Sensitivity Adjustment
+        layout.addSpacing(10)
+        sens_label = QLabel("인식 감도 조절:")
+        sens_label.setStyleSheet(f"color: {config.COLOR_PRIMARY}; font-weight: bold; font-family: '{config.FONT_MAIN}';")
+        layout.addWidget(sens_label)
+        
+        sens_container = QHBoxLayout()
+        self.slider_sens = QSlider(Qt.Orientation.Horizontal)
+        self.slider_sens.setRange(0, 100)
+        self.slider_sens.setValue(parent.sensitivity if parent else 50)
+        self.slider_sens.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                border: 1px solid rgba(255, 255, 255, 50);
+                height: 10px;
+                background: rgba(0, 0, 0, 100);
+                border-radius: 5px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {config.COLOR_PRIMARY};
+                border: 1px solid white;
+                width: 20px;
+                margin: -6px 0;
+                border-radius: 10px;
+            }}
+        """)
+        
+        self.lbl_sens_val = QLabel(f"{self.slider_sens.value()}%")
+        self.lbl_sens_val.setFixedWidth(50)
+        self.lbl_sens_val.setStyleSheet(f"color: white; font-weight: bold; font-family: '{config.FONT_MAIN}';")
+        
+        self.slider_sens.valueChanged.connect(lambda v: self.lbl_sens_val.setText(f"{v}%"))
+        self.slider_sens.valueChanged.connect(lambda v: parent.on_sensitivity_changed(v) if parent else None)
+        
+        sens_container.addWidget(self.slider_sens)
+        sens_container.addWidget(self.lbl_sens_val)
+        layout.addLayout(sens_container)
+        
         layout.addStretch()
         
         btn_close = QPushButton("닫기")
+        btn_close.setStyleSheet(f"font-family: '{config.FONT_MAIN}', sans-serif; font-size: 14px; font-weight: bold;")
+        btn_close.clicked.connect(play_ui_click)
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
 
@@ -173,21 +218,47 @@ class CustomTopBar(QWidget):
         layout.setContentsMargins(20, 0, 20, 0)
         
         self.title_label = QLabel("GESTO")
-        self.title_label.setStyleSheet(f"color: {config.COLOR_PRIMARY}; font-size: 24px; font-weight: bold; font-family: 'Audiowide'; letter-spacing: 6px; background: transparent;")
+        self.title_label.setStyleSheet(f"color: {config.COLOR_PRIMARY}; font-size: 24px; font-weight: bold; font-family: '{config.FONT_MAIN}'; letter-spacing: 6px; background: transparent;")
         layout.addWidget(self.title_label)
         
         layout.addStretch()
+        
+        # Centered Gesture Label
+        self.gesture_label = QLabel("")
+        self.gesture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.gesture_label.setStyleSheet(f"""
+            color: #FFFF00;
+            font-family: '{config.FONT_MAIN}', sans-serif;
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            background: rgba(0, 0, 0, 80);
+            border: 1px solid rgba(255, 255, 0, 100);
+            border-radius: 12px;
+            padding: 5px 25px;
+        """)
+        self.gesture_label.setVisible(False)
+        layout.addWidget(self.gesture_label)
+        
+        # Managed timer for hiding gesture text (prevents flickering)
+        self.hide_timer = QTimer(self)
+        self.hide_timer.setSingleShot(True)
+        self.hide_timer.timeout.connect(lambda: self.gesture_label.setVisible(False))
+        
+        layout.addStretch()
+        
         self.status_dot = QLabel("●")
         self.status_dot.setStyleSheet("color: #00FF00; font-size: 10px; background: transparent;")
         self.status_text = QLabel("상태: 준비됨")
-        self.status_text.setStyleSheet("color: rgba(0, 255, 255, 0.8); font-size: 12px; margin-left: 5px; font-family: 'Audiowide'; letter-spacing: 2px; font-weight: bold; background: transparent;")
+        self.status_text.setStyleSheet(f"color: #00FFFF; font-size: 13px; margin-left: 5px; font-family: '{config.FONT_MAIN}'; letter-spacing: 2px; font-weight: bold; background: transparent;")
         
         status_container = QWidget()
         status_layout = QHBoxLayout(status_container)
-        status_layout.setContentsMargins(8,4,12,4)
+        status_layout.setContentsMargins(8, 4, 12, 4)
         status_layout.addWidget(self.status_dot)
         status_layout.addWidget(self.status_text)
-        status_container.setStyleSheet("background-color: rgba(0, 255, 255, 10); border: 1px solid rgba(0, 255, 255, 30); border-radius: 12px;")
+        # Transparent background and no border for a cleaner look
+        status_container.setStyleSheet("background-color: transparent; border: none;")
         layout.addWidget(status_container)
         
         # Always on Top Indicator
@@ -195,9 +266,9 @@ class CustomTopBar(QWidget):
         aot_layout = QHBoxLayout(self.aot_container)
         aot_layout.setContentsMargins(8, 4, 8, 4)
         self.aot_label = QLabel("고정")
-        self.aot_label.setStyleSheet("color: #FF00FF; font-size: 11px; font-weight: bold; font-family: 'Audiowide', 'Black Han Sans', 'Noto Sans KR';")
+        self.aot_label.setStyleSheet(f"color: #FF00FF; font-size: 11px; font-weight: bold; font-family: '{config.FONT_MAIN}', sans-serif;")
         aot_layout.addWidget(self.aot_label)
-        self.aot_container.setStyleSheet("background-color: rgba(255, 0, 255, 15); border: 1px solid rgba(255, 0, 255, 40); border-radius: 10px;")
+        self.aot_container.setStyleSheet("background-color: transparent; border: none;")
         self.aot_container.setVisible(False)
         layout.addWidget(self.aot_container)
         
@@ -242,14 +313,13 @@ class CustomTopBar(QWidget):
                 color: {color};
                 background: transparent;
                 border: none;
-                font-family: 'Exo 2', 'Black Han Sans', 'Noto Sans KR', sans-serif;
+                font-family: '{config.FONT_MAIN}', sans-serif;
                 font-weight: bold;
-                font-size: 14px;
             }}
             QPushButton:hover {{
                 color: white;
                 background-color: {hover_color};
-                border-radius: 15px;
+                border-radius: 20px;
             }}
         """)
 
@@ -270,6 +340,20 @@ class CustomTopBar(QWidget):
         else:
             self.status_dot.setStyleSheet("color: #555555; background: transparent;")
             self.status_text.setText(f"대기 중 {mode_text}")
+
+    def update_gesture(self, text, visible=True):
+        """중앙 제스처 텍스트 업데이트 (타이머 관리 포함)"""
+        if not text:
+            self.gesture_label.setVisible(False)
+            return
+
+        display_text = config.GESTURE_DISPLAY_MAP.get(text, text)
+        self.gesture_label.setText(display_text)
+        self.gesture_label.setVisible(visible)
+        
+        # Restart timer every time a gesture is detected
+        if visible:
+            self.hide_timer.start(2500) 
 
     def set_aot(self, enabled: bool):
         """Always on Top 활성화 상태 표시기 업데이트"""
@@ -293,6 +377,8 @@ class MainWindow(QMainWindow):
         self._start_geometry = None
         self._start_mouse_pos = None
         self._normal_size = QSize(800, 600) 
+        self._drag_pos = None
+        self._edge = None
 
         self._last_scale = 0.0
         
@@ -309,7 +395,8 @@ class MainWindow(QMainWindow):
         self.top_bar.settings_clicked.connect(self.open_settings)
         
         self.on_mode_changed(self.current_mode) 
-        self.control_panel.set_sensitivity_label(self.sensitivity)
+        # Label update no longer needed in bottom panel
+        # self.control_panel.set_sensitivity_label(self.sensitivity)
         self.top_bar.set_status(False, self.current_mode)
         is_on_top = bool(self.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
         self.top_bar.set_aot(is_on_top)
@@ -376,18 +463,16 @@ class MainWindow(QMainWindow):
         content_layout.setSpacing(5) 
 
         # 2. Camera Panel (AR View)
-        # 카메라 뷰 비율 유지 레이아웃 설정
         self.webcam_panel = WebcamPanelWidget()
-        content_layout.addWidget(self.webcam_panel, 9) # Reduced stretch from 10 to 7
+        content_layout.addWidget(self.webcam_panel, 12) 
         
         # 3. Accuracy Gauge
-        # 인식 정확도 게이지 레이아웃 설정
         gauge_container = QHBoxLayout()
         gauge_container.addStretch()
         self.accuracy_gauge = AccuracyGauge()
         gauge_container.addWidget(self.accuracy_gauge)
         gauge_container.addStretch()
-        content_layout.addLayout(gauge_container, 3) 
+        content_layout.addLayout(gauge_container, 4) 
         
         self.div_bottom = QFrame()
         self.div_bottom.setFrameShape(QFrame.Shape.HLine)
@@ -397,7 +482,7 @@ class MainWindow(QMainWindow):
         
         # 4. Control Panel - Fixed Height
         self.control_panel = ControlPanelWidget()
-        self.control_panel.setFixedHeight(80) 
+        self.control_panel.setFixedHeight(110) 
         content_layout.addWidget(self.control_panel)
         
         content_layout.addSpacing(10)
@@ -409,6 +494,7 @@ class MainWindow(QMainWindow):
         self.size_grip.resize(20, 20)
 
     def open_settings(self):
+        play_ui_click()
         if not hasattr(self, "_settings_dialog") or self._settings_dialog is None:
             self._settings_dialog = SettingsDialog(self)
         self._center_settings_dialog()
@@ -443,7 +529,6 @@ class MainWindow(QMainWindow):
         scale_w = w / 1000.0
         scale_h = h / 900.0
         scale = min(scale_w, scale_h)
-        scale = max(0.5, scale)
         
         # 중복 호출 방지를 위한 스케일 체크
         if abs(scale - self._last_scale) < 0.005: 
@@ -451,15 +536,19 @@ class MainWindow(QMainWindow):
         self._last_scale = scale
         
         # 1. Scale Top Bar
+        # 1. Scale Top Bar
         if hasattr(self, 'top_bar'):
             tb = self.top_bar
-            tb.setFixedHeight(max(30, int(45 * scale)))
+            # Slimmed down from 100 to 55 to maximize camera space
+            tb_h = max(35, int(55 * scale)) 
+            tb.setFixedHeight(tb_h)
             
-            # Micro-Mode: Hide text to save space
+            # Micro-Mode: Hide labels but KEEP LED dot for status feedback
             is_micro = scale < 0.6
             tb.title_label.setVisible(not is_micro)
             tb.status_text.setVisible(not is_micro)
-            tb.status_dot.setVisible(not is_micro)
+            # tb.status_dot remains visible as per user request
+            tb.status_dot.setVisible(True)
             
             # Use same visibility logic for AOT container
             is_on_top = bool(self.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
@@ -467,58 +556,84 @@ class MainWindow(QMainWindow):
             
             # FAST: Use setFont instead of setStyleSheet during resize
             if not is_micro:
-                logo_font = QFont("Audiowide", max(12, int(22 * scale)), QFont.Weight.Bold)
+                logo_font = QFont("Ubuntu Sans")
+                logo_font.setPixelSize(max(20, int(45 * scale)))
+                logo_font.setBold(True)
+                logo_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 140) 
                 tb.title_label.setFont(logo_font)
                 
-                status_font = QFont("Audiowide", max(9, int(11 * scale)), QFont.Weight.Bold)
+                status_font = QFont("NanumSquareRound")
+                status_font.setPixelSize(max(16, int(26 * scale)))
+                status_font.setBold(True)
+                status_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 105)
                 tb.status_text.setFont(status_font)
                 
-                aot_font_size = max(8, int(11 * scale))
-                tb.aot_label.setFont(QFont("Audiowide", aot_font_size, QFont.Weight.Bold))
+                aot_font = QFont("NanumSquareRound")
+                aot_font.setPixelSize(max(16, int(26 * scale)))
+                aot_font.setBold(True)
+                tb.aot_label.setFont(aot_font)
+                
+                # Use faster update for container and spacing too
+                tb.aot_container.setMinimumWidth(int(80 * scale))
+            else:
+                # Micro-mode: Adjust dot font size and container to be compact
+                tb.status_dot.setFont(QFont("Audiowide", 14, QFont.Weight.Bold))
+                tb.status_dot.setContentsMargins(0, 0, 0, 0)
+                # find container (parent of status_dot) and shrink it
+                container = tb.status_dot.parentWidget()
+                if container:
+                    container.setStyleSheet("background: transparent; border: none; padding: 0px;")
+                    container.layout().setContentsMargins(0, 0, 0, 0)
             
-            btn_size = max(15, int(35 * scale))
+            # Aggressively enlarge top bar buttons as per user request
+            btn_size = max(30, int(45 * scale))
             for btn in [tb.btn_settings, tb.btn_min, tb.btn_max, tb.btn_close]:
                 btn.setFixedSize(btn_size, btn_size)
+                # 아이콘 크기를 버튼 크기의 70% 정도로 대폭 상향 (고해상도 대응)
+                current_font = btn.font()
+                current_font.setPixelSize(int(btn_size * 0.7)) 
+                btn.setFont(current_font)
                 
-            m = 0 if is_micro else int(10*scale)
+            m = 0 if is_micro else int(15*scale)
             tb.layout().setContentsMargins(m, 0, m, 0)
             tb.layout().setSpacing(2 if is_micro else int(5*scale))
 
-        # 2. Scale Accuracy Gauge
-        if hasattr(self, 'accuracy_gauge'):
-             self.accuracy_gauge.setMinimumHeight(int(60 * scale))
+        # 2. Scale Separator Lines (Thickness)
+        thickness = max(1, int(1 * scale))
+        if hasattr(self, 'div_top'): self.div_top.setFixedHeight(thickness)
+        if hasattr(self, 'div_bottom'): self.div_bottom.setFixedHeight(thickness)
 
-        # 3. Scale Control Panel
+        # 3. Scale Accuracy Gauge container height
+        if hasattr(self, 'accuracy_gauge'):
+             self.accuracy_gauge.setMinimumHeight(int(80 * scale))
+
+        # 4. Scale Control Panel
         if hasattr(self, 'control_panel'):
             cp = self.control_panel
             is_micro = scale < 0.6
             cp.update_scaling(scale) 
             
-            # Micro-Mode: Hide text in buttons to shrink further
+            # Modified: Keep all elements visible in micro mode
             if is_micro:
-                cp.mode_combo.hide() # Combo is too wide, hide it in micro
-                cp.sensitivity_btn.setText("") # Icons or empty
-                cp.sensitivity_btn.setIcon(QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_FileDialogDetailedView))
+                cp.mode_btn.show() # Keep it visible as per user request
                 cp.toggle_button.setText("") 
                 cp.toggle_button.setIcon(QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_MediaPlay if not self.is_detecting else QApplication.style().StandardPixmap.SP_MediaStop))
             else:
-                cp.mode_combo.show()
-                cp.sensitivity_btn.setIcon(QIcon()) # Remove icon
+                cp.mode_btn.show()
                 cp.toggle_button.setIcon(QIcon())
-                cp.set_sensitivity_label(self.sensitivity)
                 cp.set_detection_state(self.is_detecting)
                 
-            cp.setFixedHeight(max(30, int(60 * scale)) if not is_micro else 35)
+            cp.setFixedHeight(max(30, int(60 * scale)))
             
             m = 2 if is_micro else int(10*scale)
             cp.layout().setContentsMargins(m, 2, m, 2)
             cp.layout().setSpacing(2 if is_micro else int(8*scale))
 
-        # 4. Global Margins
+        # 6. Global Margins (Central Widget)
         if hasattr(self, 'centralWidget') and self.centralWidget() and self.centralWidget().layout():
-            m = max(5, int(15 * scale))
+            m = max(2, int(10 * scale)) # Reduced padding
             self.centralWidget().layout().setContentsMargins(m, m, m, m)
-            self.centralWidget().layout().setSpacing(max(5, int(8 * scale)))
+            self.centralWidget().layout().setSpacing(0) # No spacing between blocks, separators handle it
 
     # --- Event Filter for Robust Resizing & Dragging ---
     def eventFilter(self, obj, event):
@@ -574,11 +689,7 @@ class MainWindow(QMainWindow):
                 
                 if hasattr(self, "_settings_dialog") and self._settings_dialog and self._settings_dialog.isVisible():
                     if not self._settings_dialog.geometry().contains(global_pt):
-                        is_header_click = False
-                        if obj == self.top_bar or (widget and self.top_bar.isAncestorOf(widget)):
-                            is_header_click = True
-                        if not is_header_click:
-                            self._settings_dialog.close()
+                        self._settings_dialog.close()
                 
                 is_interactive = False
                 if widget:
@@ -597,14 +708,15 @@ class MainWindow(QMainWindow):
                     return True 
                 
                 is_draggable = False
-                if obj == self.top_bar:
+                if obj == self.top_bar or (widget and self.top_bar.isAncestorOf(widget)):
                     is_draggable = True
-                elif widget and self.top_bar.isAncestorOf(widget):
+                elif obj == self or obj == self.centralWidget():
                     is_draggable = True
                 
                 if is_draggable:
+                     # Standardize on _drag_pos to match MouseMove logic
                      self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-                     return False 
+                     return True
             
         elif event.type() == QEvent.Type.MouseButtonDblClick:
             if event.button() == Qt.MouseButton.LeftButton:
@@ -764,13 +876,16 @@ class MainWindow(QMainWindow):
         self.is_detecting = is_active
         self.control_panel.set_detection_state(is_active)
         self.webcam_panel.set_recording(is_active)
+        
         self.top_bar.set_status(is_active, self.current_mode)
+        if is_active:
+            self.top_bar.update_gesture("AR 추적 활성화됨")
+        else:
+            self.top_bar.update_gesture("대기 중")
         
         if is_active:
-            self.webcam_panel.gesture_display.update_status("AR 추적 활성화됨", None)
             self.start_detection.emit()
         else:
-            self.webcam_panel.gesture_display.update_status("대기 중", None)
             self.stop_detection.emit()
 
     def on_toggle_clicked(self):
@@ -787,6 +902,11 @@ class MainWindow(QMainWindow):
     def on_mode_changed(self, mode: str):
         self.current_mode = mode
         self.mode_changed.emit(mode)
+        
+        # Sync TriggerWorker mode
+        if hasattr(self, 'trigger_worker'):
+            self.trigger_worker.set_current_mode(mode)
+            
         self.top_bar.set_status(self.is_detecting, mode)
         
         # 모드 변경 시 '항상 위에'의 Ghost 모드 상태 업데이트 (PPT <-> Other 대응)
@@ -811,10 +931,6 @@ class MainWindow(QMainWindow):
 
 
     def update_gesture(self, gesture_name: str, confidence: float = 0.0, cooldown_until: float = 0.0):
-        # Unknown은 PPT처럼 무시 — UI·디버그에도 인식된 제스처로 표시하지 않음
-        raw = (gesture_name or "").strip()
-        if raw and raw.lower() == "unknown":
-            gesture_name = ""
         # 제스처 정보를 UI/게이지에 전달
         if self.is_detecting and gesture_name:
              self.accuracy_gauge.set_accuracy(int(confidence * 100))
@@ -822,12 +938,4 @@ class MainWindow(QMainWindow):
              self.accuracy_gauge.set_accuracy(0)
 
         if self.is_detecting:
-            self.webcam_panel.gesture_display.update_status(
-                "감지 중",
-                gesture_name,
-                clear_at_monotonic=cooldown_until if cooldown_until > 0 else None,
-            )
-
-    def update_gesture_debug(self, probs: dict, threshold: float):
-        """GESTURE_DEBUG 시 제스처별 확률·threshold 표시 (기존 UI 유지)."""
-        self.webcam_panel.gesture_display.set_debug_info(probs, threshold)
+            if gesture_name: self.top_bar.update_gesture(gesture_name)

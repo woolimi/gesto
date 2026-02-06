@@ -17,6 +17,10 @@ from app.workers import (
     play_mode_sound,
     start_playback_worker,
     stop_playback_worker,
+    play_aot_on,
+    play_aot_off,
+    play_gesture_success,
+    play_app_startup,
 )
 
 
@@ -24,6 +28,13 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName(config.APP_NAME)
     app.setApplicationVersion(config.APP_VERSION)
+
+    # Global Font Registration
+    from PyQt6.QtGui import QFontDatabase
+    import os
+    font_path = os.path.join(config.ASSETS_DIR, "Giants-Inline.ttf")
+    if os.path.exists(font_path):
+        QFontDatabase.addApplicationFont(font_path)
 
     window = MainWindow()
     mode_controller = ModeController(initial_mode="GAME")
@@ -69,6 +80,10 @@ def main():
     # 트리거 → Always on Top 제어
     trigger.trigger_aot_on.connect(lambda: window.set_always_on_top(True))
     trigger.trigger_aot_off.connect(lambda: window.set_always_on_top(False))
+    
+    # 트리거 → Always on Top 사운드
+    trigger.trigger_aot_on.connect(play_aot_on)
+    trigger.trigger_aot_off.connect(play_aot_off)
 
     # Mode Controller → UI (감지 상태 반영)
     mode_controller.detection_state_changed.connect(window.set_detection_state)
@@ -86,8 +101,21 @@ def main():
     # 모드별 감지 → Mode Controller (제스처 시 pynput 출력) + UI (인식된 제스처 표시)
     mode_detection.gesture_detected.connect(mode_controller.on_gesture)
     mode_detection.gesture_detected.connect(window.update_gesture)
-    if config.GESTURE_DEBUG:
-        mode_detection.gesture_debug_updated.connect(window.update_gesture_debug)
+    
+    # 제스처 인식 성공 시 효과음 (연속 호출 방지 로직 포함)
+    last_played_gesture = [None]  # Closure-based state
+    def on_gesture_detected(gesture, confidence, cooldown_until):
+        if not gesture:
+            last_played_gesture[0] = None
+            return
+            
+        # 새로운 제스처가 감지되었을 때만 효과음 재생 (게임 모드 제외)
+        if gesture != last_played_gesture[0]:
+            if window.current_mode != "GAME":
+                play_gesture_success()
+            last_played_gesture[0] = gesture
+
+    mode_detection.gesture_detected.connect(on_gesture_detected)
 
     # 카메라 오류
     def on_camera_error(msg):
@@ -112,6 +140,7 @@ def main():
     app.aboutToQuit.connect(on_quit)
 
     window.show()
+    play_app_startup()
     sys.exit(app.exec())
 
 

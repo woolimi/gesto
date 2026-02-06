@@ -11,6 +11,11 @@ from app.workers.sound_worker import (
     play_mode_sound,
     start_playback_worker,
     stop_playback_worker,
+    play_aot_on,
+    play_aot_off,
+    play_gesture_success,
+    play_ui_click,
+    play_app_startup,
 )
 
 __all__ = [
@@ -22,4 +27,9 @@ __all__ = [
     "play_mode_sound",
     "start_playback_worker",
     "stop_playback_worker",
+    "play_aot_on",
+    "play_aot_off",
+    "play_gesture_success",
+    "play_ui_click",
+    "play_app_startup",
 ]

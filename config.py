@@ -51,6 +51,8 @@ WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 WINDOW_TITLE = f"{APP_NAME} - {APP_DESCRIPTION}"
 
+FONT_MAIN = "Giants Inline"
+
 # 색상 테마 (V4 Chroma/Neon Dark Theme)
 COLOR_PRIMARY = "#00FFFF"      # Neon Cyan
 COLOR_SECONDARY = "#FF00FF"    # Neon Magenta
@@ -79,3 +81,39 @@ GESTURE_CLASSES = {
         "FULLSCREEN": 9,
     }
 }
+# 제스처 표시 이름 매핑
+GESTURE_DISPLAY_MAP = {
+    "Swipe_Left": "다음 슬라이드 ⏩",
+    "Swipe_Right": "이전 슬라이드 ⏪",
+    "Pinch_Out": "전체 화면",
+    "Pinch_In": "최소화",
+    "forward": "전진 ⬆️",
+    "back": "후진 ⬇️",
+    "left": "좌회전 ⬅️",
+    "right": "우회전 ➡️",
+    "AR 추적 활성화됨": "동작 감지중",
+    "대기 중": "동작 감지 해제"
+}
+
+# 제스처 -> 키 입력 매핑 (ModeController 사용)
+# 형식: { "모드": { "제스처명": "키보드키" } }
+# pynput.keyboard.Key 속성명(예: "right", "left", "up", "space") 또는 일반 문자 사용 가능
+GESTURE_ACTION_MAP = {
+    "PPT": {
+        "Swipe_Left": "right",
+        "Swipe_Right": "left",
+    },
+    "YOUTUBE": {
+        "Swipe_Left": "j",
+        "Swipe_Right": "l",
+        "Pinch_Out": "k",
+        "Pinch_In": "m",
+    },
+    "GAME": {
+        "forward": "up",
+        "back": "down",
+        "left": "left",
+        "right": "right",
+    }
+}
+

@@ -8,6 +8,8 @@ from typing import Literal
 from PyQt6.QtCore import QObject, pyqtSignal
 from pynput.keyboard import Controller as KeyController, Key
 
+import config
+
 ModeName = Literal["PPT", "YOUTUBE", "GAME"]
 
 
@@ -27,28 +29,25 @@ class ModeController(QObject):
         self._last_game_keys: set = set()
 
     def _build_gesture_mapping(self) -> dict[tuple[str, str], object]:
-        """(mode, gesture_name) -> pynput Key 또는 문자. Game은 방향키(↑↓←→)."""
-        return {
-            # PPT: 공통 LSTM Swipe만 사용 (app/models/ lstm_legacy)
-            ("PPT", "Swipe_Left"): Key.right,
-            ("PPT", "Swipe_Right"): Key.left,
-            # YouTube: LSTM 6종 제스처 → YouTube 단축키 (j 10초 뒤, l 10초 앞, k 재생·정지, m 음소거)
-            ("YOUTUBE", "Swipe_Left"): "j",
-            ("YOUTUBE", "Swipe_Right"): "l",
-            ("YOUTUBE", "Pinch_Out_Left"): "k",
-            ("YOUTUBE", "Pinch_Out_Right"): "k",
-            ("YOUTUBE", "Pinch_In_Left"): "m",
-            ("YOUTUBE", "Pinch_In_Right"): "m",
-            # Game: 방향키 (크롬 등에서 방향키로 동작하는 게임 제어)
-            ("GAME", "forward"): Key.up,
-            ("GAME", "back"): Key.down,
-            ("GAME", "left"): Key.left,
-            ("GAME", "right"): Key.right,
-            ("GAME", "직진"): Key.up,
-            ("GAME", "후진"): Key.down,
-            ("GAME", "좌회전"): Key.left,
-            ("GAME", "우회전"): Key.right,
-        }
+        """config.GESTURE_ACTION_MAP에서 매핑을 로드하고 문자열 키를 pynput Key 객체로 변환."""
+        mapping = {}
+        for mode, gestures in config.GESTURE_ACTION_MAP.items():
+            for g_name, key_str in gestures.items():
+                resolved_key = self._resolve_key(key_str)
+                mapping[(mode, g_name)] = resolved_key
+        return mapping
+
+    def _resolve_key(self, key_str: str) -> object:
+        """문자열(예: 'right', 'enter', 'a')을 pynput Key 또는 문자로 변환."""
+        if len(key_str) == 1:
+            return key_str
+        
+        # pynput.keyboard.Key에 정의된 특수 키 확인
+        try:
+            return getattr(Key, key_str.lower())
+        except AttributeError:
+            # 매칭되는 특수 키가 없으면 문자 그대로 반환
+            return key_str
 
     def set_mode(self, mode: ModeName) -> None:
         if mode in self.VALID_MODES:
@@ -91,8 +90,6 @@ class ModeController(QObject):
         keys = []
         for name in names:
             key = self._gesture_to_key.get((self._mode, name))
-            if key is None:
-                key = self._gesture_to_key.get((self._mode, name.lower()))
             if key is not None:
                 keys.append(key)
 
