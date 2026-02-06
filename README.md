@@ -83,6 +83,10 @@ main.py
 # git xet 설치가 안되있으면 설치
 curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/huggingface/xet-core/refs/heads/main/git_xet/install.sh | sh
 
+# lfs 설치
+curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
+sudo apt-get install git-lfs
+
 # 폴더로 이동
 cd data_collector
 # 데이터 가져오기
