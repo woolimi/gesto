@@ -48,3 +48,4 @@ data/*.json
 
 # Conda
 .conda/
+data_collector/data/
