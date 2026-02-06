@@ -52,25 +52,6 @@ class GestureDisplayWidget(QWidget):
         # Remove widget-level background
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-<<<<<<< HEAD
-    def set_threshold(self, threshold: float) -> None:
-        """감도 변경 시 호출. 현재 인식 기준선(threshold) 저장 (UI/표시용)."""
-        self._current_threshold = threshold
-
-    def set_debug_info(self, probs: dict, threshold: float) -> None:
-        """GESTURE_DEBUG 시 호출. 제스처별 확률·threshold 한 줄로 표시.
-        쿨다운 중(_last_gesture 유지)이면 갱신하지 않아 제스처와 함께 유지."""
-        if not getattr(config, "GESTURE_DEBUG", False):
-            return
-        if self._last_gesture is not None:
-            return  # 쿨다운 중: 인식된 제스처와 함께 디버그 로그 유지
-        parts = [f"thr: {threshold:.2f}"]
-        if probs:
-            sorted_probs = sorted(probs.items(), key=lambda x: -x[1])
-            parts.append(" | ".join(f"{k}: {v:.2f}" for k, v in sorted_probs))
-        self.debug_label.setText(" | ".join(parts))
-        self.debug_label.setVisible(True)
-=======
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_font_scaling()
@@ -125,7 +106,6 @@ class GestureDisplayWidget(QWidget):
                 f"color: {config.COLOR_TEXT_SECONDARY}; background-color: rgba(0, 0, 0, 150); "
                 f"border-radius: {radius}px; padding: {padding}px {padding*3}px;"
             )
->>>>>>> 98f4165 (feat: updated-gui-and-added-sfx)
 
     def _clear_gesture_label(self):
         """쿨다운 종료 시점에 호출: 인식된 제스처·디버그 라벨 초기화 후 실시간 반영 모드로 전환."""
