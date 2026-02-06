@@ -91,6 +91,10 @@ GESTURE_DISPLAY_MAP = {
     "Pinch_In_Right": "최소화 ⬇️",
     "Play_Pause_Left": "재생/일시정지 ⏯️",
     "Play_Pause_Right": "재생/일시정지 ⏯️",
+    "Volume_Up_Left": "볼륨 올림 🔊",
+    "Volume_Up_Right": "볼륨 올림 🔊",
+    "Volume_Down_Left": "볼륨 내림 🔉",
+    "Volume_Down_Right": "볼륨 내림 🔉",
     "forward": "전진 ⬆️",
     "back": "후진 ⬇️",
     "left": "좌회전 ⬅️",
@@ -126,6 +130,13 @@ GESTURE_ACTION_MAP = {
         # New explicit play/pause gestures (좌/우 분리)
         "Play_Pause_Left": "k",
         "Play_Pause_Right": "k",
+
+        # Volume control (좌/우 분리)
+        # YouTube 단축키: ArrowUp/ArrowDown = 볼륨 ±5%
+        "Volume_Up_Left": "up",
+        "Volume_Up_Right": "up",
+        "Volume_Down_Left": "down",
+        "Volume_Down_Right": "down",
     },
     "GAME": {
         "forward": "up",

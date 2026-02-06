@@ -2,6 +2,8 @@ SUPPORTED_GESTURES = [
     "Pinch_In_Left", "Pinch_In_Right",
     "Pinch_Out_Left", "Pinch_Out_Right",
     "Play_Pause_Left", "Play_Pause_Right",
+    "Volume_Up_Left", "Volume_Up_Right",
+    "Volume_Down_Left", "Volume_Down_Right",
     "Swipe_Left", "Swipe_Right",
 ]
 
@@ -22,6 +24,7 @@ class ScenarioManager:
         Generates scenarios for a given gesture name.
         - Pinch_*_Left/Right: 거리 × 위치 × 6회 = 54단계 (손은 제스처명에 따라 고정)
         - Play_Pause_Left/Right: 거리 × 위치 × 6회 = 54단계 (손은 제스처명에 따라 고정)
+        - Volume_Up/Down_Left/Right: 거리 × 위치 × 6회 = 54단계 (손은 제스처명에 따라 고정)
         - Swipe_Left, Swipe_Right: 거리 × 위치 × 6회 = 54단계 (Swipe_Left=오른손, Swipe_Right=왼손)
         """
         self.gesture_name = gesture_name
@@ -37,13 +40,28 @@ class ScenarioManager:
         reps = 6
 
         # 제스처별 손 고정 (훈련용으로 좌/우 분리)
-        if gesture_name in ("Pinch_In_Left", "Pinch_Out_Left", "Play_Pause_Left"):
+        if gesture_name in (
+            "Pinch_In_Left",
+            "Pinch_Out_Left",
+            "Play_Pause_Left",
+            "Volume_Up_Left",
+            "Volume_Down_Left",
+        ):
             hands = ["Left"]
-        elif gesture_name in ("Pinch_In_Right", "Pinch_Out_Right", "Play_Pause_Right"):
+        elif gesture_name in (
+            "Pinch_In_Right",
+            "Pinch_Out_Right",
+            "Play_Pause_Right",
+            "Volume_Up_Right",
+            "Volume_Down_Right",
+        ):
             hands = ["Right"]
         elif gesture_name == "Swipe_Left":
             hands = ["Right"]
-        else:  # Swipe_Right
+        elif gesture_name == "Swipe_Right":
+            hands = ["Left"]
+        else:
+            # Fallback (should not happen if SUPPORTED_GESTURES is kept in sync)
             hands = ["Left"]
 
         korean_map = {
