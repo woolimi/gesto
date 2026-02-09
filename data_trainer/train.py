@@ -1,6 +1,7 @@
 import os
 import shutil
 import numpy as np
+from datetime import datetime
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
@@ -14,7 +15,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # 경로 설정 (data_collector/data 아래 Gesture, Posture 폴더에서 로드)
-DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data_collector', 'data'))
+# 경로 설정 (data_collector/data/converted_gesture 아래 Gesture, Posture 폴더에서 로드)
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data_collector', 'data', 'converted_gesture'))
 MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'models'))
 # 앱이 로드하는 모델 경로 (학습 후 여기로 복사)
 APP_MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'app', 'models'))
@@ -22,7 +24,7 @@ APP_MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '
 # 하이퍼파라미터 — 두 손 녹화: 42 랜드마크 (손1 21 + 손2 21)
 SEQUENCE_LENGTH = 30  # 1초 * 30fps (제스처 구간에 집중, 한손 주먹·한손 스와이프 인식 개선)
 LANDMARKS_COUNT = 42
-COORDS_COUNT = 3
+COORDS_COUNT = 11
 INPUT_SHAPE = (SEQUENCE_LENGTH, LANDMARKS_COUNT * COORDS_COUNT)
 EPOCHS = 200  # Early stopping으로 실제로는 더 적게 학습될 수 있음
 BATCH_SIZE = 32
@@ -38,13 +40,24 @@ def normalize_landmarks(data):
         scale = np.max(np.abs(normalized), axis=(1, 2), keepdims=True) + 1e-6
         return (normalized / scale).astype(np.float32)
     # 42: 손마다 손목 기준 정규화
+    # 42: 손마다 손목 기준 정규화 (xyz만)
     normalized = np.zeros_like(data, dtype=np.float32)
+    
+    # Copy all channels first (features are passed through)
+    normalized = data.copy()
+    
     for start in (0, 21):
         end = start + 21
-        wrist = data[:, start : start + 1, :]
-        part = data[:, start:end, :] - wrist
+        # Extract xyz only (Channels 0-2)
+        wrist = data[:, start : start + 1, 0:3]
+        part = data[:, start:end, 0:3] - wrist
+        
+        # Scale based on xyz max value
         scale = np.max(np.abs(part), axis=(1, 2), keepdims=True) + 1e-6
-        normalized[:, start:end, :] = part / scale
+        
+        # Update normalized xyz
+        normalized[:, start:end, 0:3] = part / scale
+        
     return normalized
 
 def load_data(data_dir, apply_normalization=True):
@@ -102,14 +115,14 @@ def load_data(data_dir, apply_normalization=True):
                         if data.shape[1] == 21:
                             pad = np.zeros((data.shape[0], 21, 3), dtype=data.dtype)
                             data = np.concatenate([data, pad], axis=1)  # (T, 42, 3)
-                        if data.shape[1] != LANDMARKS_COUNT or data.shape[2] != 3:
+                        if data.shape[1] != LANDMARKS_COUNT or data.shape[2] != COORDS_COUNT:
                             continue
                         if apply_normalization:
                             data = normalize_landmarks(data)
                         if data.shape[0] > SEQUENCE_LENGTH:
                             data = data[:SEQUENCE_LENGTH]
                         elif data.shape[0] < SEQUENCE_LENGTH:
-                            padding = np.zeros((SEQUENCE_LENGTH - data.shape[0], LANDMARKS_COUNT, 3), dtype=data.dtype)
+                            padding = np.zeros((SEQUENCE_LENGTH - data.shape[0], LANDMARKS_COUNT, COORDS_COUNT), dtype=data.dtype)
                             data = np.vstack((data, padding))
                         data_flat = data.reshape(SEQUENCE_LENGTH, -1)
                         
@@ -157,8 +170,8 @@ def audit_legacy_data(data_dir):
             if npy_files:
                 try:
                     one = np.load(os.path.join(gpath, npy_files[0]))
-                    if one.ndim != 3 or one.shape[2] != 3 or one.shape[1] not in (21, 42):
-                        issues.append(f"{gesture}: shape 기대 (T, 21|42, 3), 실제 {one.shape}")
+                    if one.ndim != 3 or one.shape[2] != COORDS_COUNT or one.shape[1] not in (21, 42):
+                        issues.append(f"{gesture}: shape 기대 (T, 21|42, {COORDS_COUNT}), 실제 {one.shape}")
                     if one.shape[0] < 5:
                         issues.append(f"{gesture}: 프레임 수 너무 적음 ({one.shape[0]})")
                 except Exception as e:
@@ -269,7 +282,7 @@ def save_tflite_model(model, save_path):
         print(f"❌ TFLite 변환 실패: {e}")
         print(f"   H5 모델은 정상적으로 저장되었습니다.")
 
-def evaluate_model(model, X_test, y_test, label_map):
+def evaluate_model(model, X_test, y_test, label_map, output_dir=MODELS_DIR):
     """
     모델 평가 및 상세 메트릭 출력
     
@@ -278,6 +291,7 @@ def evaluate_model(model, X_test, y_test, label_map):
         X_test: 테스트 데이터
         y_test: 테스트 레이블 (one-hot encoded)
         label_map: 레이블 매핑 딕셔너리
+        output_dir: 결과 저장 디렉토리
     
     Returns:
         confusion matrix
@@ -312,7 +326,7 @@ def evaluate_model(model, X_test, y_test, label_map):
     plt.xlabel('Predicted Label', fontsize=12)
     plt.tight_layout()
     
-    cm_path = os.path.join(MODELS_DIR, 'confusion_matrix.png')
+    cm_path = os.path.join(output_dir, 'confusion_matrix.png')
     plt.savefig(cm_path, dpi=150)
     print(f"\n✅ Confusion Matrix 저장됨: {cm_path}")
     plt.show()
@@ -420,11 +434,12 @@ def train_model(X, y, save_path, model_name, label_map=None):
     print("🔍 모델 평가 중...")
     print("="*70)
     eval_label_map = label_map if label_map else {f"Class_{i}": i for i in range(num_classes)}
-    evaluate_model(model, X_test, y_test, eval_label_map)
+    output_dir = os.path.dirname(save_path)
+    evaluate_model(model, X_test, y_test, eval_label_map, output_dir)
     
     return history, model
 
-def plot_training_history(history):
+def plot_training_history(history, output_dir=MODELS_DIR):
     """
     학습 히스토리 시각화
     """
@@ -451,7 +466,7 @@ def plot_training_history(history):
     plt.tight_layout()
     
     # 저장
-    history_path = os.path.join(MODELS_DIR, 'training_history.png')
+    history_path = os.path.join(output_dir, 'training_history.png')
     plt.savefig(history_path, dpi=150)
     print(f"✅ 학습 히스토리 저장됨: {history_path}")
     plt.show()
@@ -474,13 +489,19 @@ def main():
 
     # Train Legacy
     if len(X_legacy) > 0:
-        save_path = os.path.join(MODELS_DIR, 'lstm_legacy.h5')
+        # Timestamped execution directory
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = os.path.join(MODELS_DIR, timestamp)
+        os.makedirs(run_dir, exist_ok=True)
+        print(f"📂 이번 학습 결과 저장 폴더: {run_dir}")
+
+        save_path = os.path.join(run_dir, 'lstm_legacy.h5')
         history, model = train_model(
             X_legacy, y_legacy, save_path, "Legacy Model",
             label_map=label_map_legacy
         )
         
-        # data_trainer/models → app/models 복사 (앱이 여기서 로드)
+        # data_trainer/models/{timestamp}/... → app/models/ 복사 (앱이 여기서 로드)
         os.makedirs(APP_MODELS_DIR, exist_ok=True)
         tflite_src = save_path.replace(".h5", ".tflite")
         labels_src = save_path.replace(".h5", "_labels.txt")
@@ -495,7 +516,7 @@ def main():
         # Plot training history
         if history:
             print("\n📈 학습 히스토리 시각화 중...")
-            plot_training_history(history)
+            plot_training_history(history, output_dir=run_dir)
             
         print("\n" + "="*70)
         print("🎉 모델 학습 완료!")
@@ -504,8 +525,8 @@ def main():
         print(f"   - {save_path}")
         print(f"   - {save_path.replace('.h5', '.tflite')}")
         print(f"   - app/models/ (위 .tflite, _labels.txt 복사됨)")
-        print(f"   - {os.path.join(MODELS_DIR, 'confusion_matrix.png')}")
-        print(f"   - {os.path.join(MODELS_DIR, 'training_history.png')}")
+        print(f"   - {os.path.join(run_dir, 'confusion_matrix.png')}")
+        print(f"   - {os.path.join(run_dir, 'training_history.png')}")
         
     else:
         print("❌ No data found. Please collect data first using collect_mp.py")

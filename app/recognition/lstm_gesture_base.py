@@ -19,8 +19,33 @@ import config
 # 학습 시와 동일 (data_trainer/train.py) — 두 손: 42 랜드마크, 30프레임(1초)
 SEQUENCE_LENGTH = 30
 LANDMARKS_COUNT = 42
-COORDS_COUNT = 3
+COORDS_COUNT = 11
 INPUT_SHAPE = (SEQUENCE_LENGTH, LANDMARKS_COUNT * COORDS_COUNT)
+
+# Feature Indices
+# 0-2: x, y, z
+# 3: Is_Fist (Left)
+# 4: Pinch_Dist (Left)
+# 5: Thumb_V (Left)
+# 6: Index_Z_V (Left)
+# 7: Is_Fist (Right)
+# 8: Pinch_Dist (Right)
+# 9: Thumb_V (Right)
+# 10: Index_Z_V (Right)
+NUM_CHANNELS = 11
+
+# Landmark Indices (MediaPipe Hands)
+WRIST = 0
+THUMB_TIP = 4
+INDEX_MCP = 5
+INDEX_PIP = 6
+INDEX_TIP = 8
+MIDDLE_PIP = 10
+MIDDLE_TIP = 12
+RING_PIP = 14
+RING_TIP = 16
+PINKY_PIP = 18
+PINKY_TIP = 20
 
 
 def _load_gesture_classes(models_dir: str, base_name: str = "lstm_legacy") -> list:
@@ -49,12 +74,22 @@ def _normalize_landmarks(data: np.ndarray) -> np.ndarray:
         scale = np.max(np.abs(normalized), axis=(1, 2), keepdims=True) + 1e-6
         return (normalized / scale).astype(np.float32)
     normalized = np.zeros_like(data, dtype=np.float32)
+    
+    # Copy all channels first (features are passed through)
+    normalized = data.copy()
+    
     for start in (0, 21):
         end = start + 21
-        wrist = data[:, start : start + 1, :]
-        part = data[:, start:end, :] - wrist
+        # Extract xyz only (Channels 0-2)
+        wrist = data[:, start : start + 1, 0:3]
+        part = data[:, start:end, 0:3] - wrist
+        
+        # Scale based on xyz max value
         scale = np.max(np.abs(part), axis=(1, 2), keepdims=True) + 1e-6
-        normalized[:, start:end, :] = part / scale
+        
+        # Update normalized xyz
+        normalized[:, start:end, 0:3] = part / scale
+        
     return normalized
 
 
@@ -105,6 +140,59 @@ class LstmGestureBase:
         InterpreterClass = self._get_tflite_interpreter_class()
         self._interpreter: Any = InterpreterClass(model_path=tflite_path)
         self._interpreter.allocate_tensors()
+        
+        # Velocity calculation state
+        self._prev_right = None
+        self._prev_left = None
+
+    def _calculate_euclidean_dist(self, p1, p2):
+        return np.linalg.norm(p1 - p2)
+
+    def _is_fist(self, landmarks):
+        """
+        Check if the hand is in a fist state (Robust, Rotation-Invariant).
+        Condition: Dist(Wrist, Tip) < Dist(Wrist, PIP) for ALL 4 fingers.
+        """
+        wrist = landmarks[WRIST]
+        
+        fingers = [
+            (INDEX_PIP, INDEX_TIP),
+            (MIDDLE_PIP, MIDDLE_TIP),
+            (RING_PIP, RING_TIP),
+            (PINKY_PIP, PINKY_TIP)
+        ]
+        
+        curled_count = 0
+        for pip_idx, tip_idx in fingers:
+            dist_tip = self._calculate_euclidean_dist(wrist, landmarks[tip_idx])
+            dist_pip = self._calculate_euclidean_dist(wrist, landmarks[pip_idx])
+            if dist_tip < dist_pip:
+                curled_count += 1
+                
+        return 1.0 if curled_count == 4 else 0.0
+
+    def _process_hand_features(self, landmarks, prev_landmarks):
+        """
+        Calculate 4 features for a single hand (21 landmarks).
+        Features: [Is_Fist, Pinch_Dist, Thumb_V, Index_Z_V]
+        """
+        # 1. Is_Fist
+        fist_val = self._is_fist(landmarks)
+        
+        # 2. Pinch_Dist (Thumb Tip - Index Tip)
+        pinch_dist = self._calculate_euclidean_dist(landmarks[THUMB_TIP], landmarks[INDEX_TIP])
+        
+        # 3. Thumb_V (y velocity)
+        thumb_v = 0.0
+        if prev_landmarks is not None:
+            thumb_v = landmarks[THUMB_TIP][1] - prev_landmarks[THUMB_TIP][1]
+            
+        # 4. Index_Z_V (z velocity)
+        index_z_v = 0.0
+        if prev_landmarks is not None:
+            index_z_v = landmarks[INDEX_TIP][2] - prev_landmarks[INDEX_TIP][2]
+            
+        return [fist_val, pinch_dist, thumb_v, index_z_v]
 
     @property
     def cooldown_until(self) -> float:
@@ -156,6 +244,42 @@ class LstmGestureBase:
                     left_slot = arr
         return np.vstack([right_slot, left_slot])  # (42, 3)
 
+    def _construct_11_channel_data(self, landmarks: np.ndarray) -> np.ndarray:
+        """
+        (42, 3) landmarks -> (42, 11) data with features.
+        Updates self._prev_right and self._prev_left.
+        """
+        # Right: 0-20, Left: 21-41
+        right_hand = landmarks[0:21, :]
+        left_hand = landmarks[21:42, :]
+        
+        # Calculate Features
+        left_feats = self._process_hand_features(left_hand, self._prev_left)
+        right_feats = self._process_hand_features(right_hand, self._prev_right)
+        
+        # Update state
+        self._prev_right = right_hand.copy()
+        self._prev_left = left_hand.copy()
+        
+        # Create (42, 11) array
+        new_data = np.zeros((42, NUM_CHANNELS), dtype=np.float32)
+        new_data[:, 0:3] = landmarks
+        
+        # Assign features to all landmarks (broadcasting)
+        # Left Hand Features (Channels 3-6)
+        new_data[:, 3] = left_feats[0] # Is_Fist
+        new_data[:, 4] = left_feats[1] # Pinch_Dist
+        new_data[:, 5] = left_feats[2] # Thumb_V
+        new_data[:, 6] = left_feats[3] # Index_Z_V
+        
+        # Right Hand Features (Channels 7-10)
+        new_data[:, 7] = right_feats[0] # Is_Fist
+        new_data[:, 8] = right_feats[1] # Pinch_Dist
+        new_data[:, 9] = right_feats[2] # Thumb_V
+        new_data[:, 10] = right_feats[3] # Index_Z_V
+        
+        return new_data
+
     def process(self, frame_bgr) -> tuple[Optional[str], float]:
         """
         한 프레임 처리. 버퍼가 찼을 때만 추론.
@@ -165,8 +289,11 @@ class LstmGestureBase:
         if landmarks is None:
             return None, 0.0
 
-        # (42, 3) → (1, 42, 3) 정규화 후 (126,)로 버퍼에 추가 (30프레임 모음)
-        data = np.expand_dims(landmarks, axis=0)
+        # (42, 3) → (42, 11) Feature Extraction
+        data_11ch = self._construct_11_channel_data(landmarks)
+
+        # (42, 11) → (1, 42, 11) 정규화 후 (462,)로 버퍼에 추가
+        data = np.expand_dims(data_11ch, axis=0)
         data = _normalize_landmarks(data)
         row = data.reshape(-1).astype(np.float32)
         self._buffer.append(row)
@@ -210,3 +337,5 @@ class LstmGestureBase:
             self._hands.close()
             self._hands = None
         self._buffer.clear()
+        self._prev_right = None
+        self._prev_left = None
