@@ -187,14 +187,20 @@ def create_model(num_classes):
     - L2 정규화 추가 (일반화 성능 개선)
     """
     model = Sequential([
-        LSTM(64, return_sequences=True, input_shape=INPUT_SHAPE),
-        Dropout(0.3),
+        # 첫 레이어는 유닛을 넉넉히 주어 특징을 충분히 뽑습니다.
+        LSTM(128, return_sequences=True, input_shape=INPUT_SHAPE),
+        Dropout(0.2),
+        
+        # 두 번째 층은 64개로 줄여 정보를 압축합니다.
         LSTM(64, return_sequences=False),
-        Dropout(0.3),
-        Dense(32, activation='relu', kernel_regularizer=l2(0.01)),
+        Dropout(0.2),
+        
+        # Dense 층은 너무 크지 않게 하여 연산 속도를 확보합니다.
+        Dense(32, activation='relu'),
+        # L2 규제는 학습 시 과적합을 막아주지만, 추론 속도에는 영향을 주지 않으므로 유지합니다.
         Dense(num_classes, activation='softmax')
     ])
-    
+        
     model.compile(
         optimizer='Adam',
         loss='categorical_crossentropy',

@@ -1,6 +1,12 @@
+Pinch_In_Left
 Pinch_In_Right
 Pinch_Out_Left
 Pinch_Out_Right
+Play_Pause_Left
 Play_Pause_Right
 Swipe_Left
 Swipe_Right
+Volume_Down_Left
+Volume_Down_Right
+Volume_Up_Left
+Volume_Up_Right
