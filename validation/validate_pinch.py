@@ -40,16 +40,21 @@ def draw_landmarks(image, landmarks, color=(0, 255, 0), thickness=2):
     Draws hand landmarks and connections on a canvas.
     """
     h, w, _ = image.shape
-    coords = []
-    for point in landmarks:
-        x, y = int(point[0] * w), int(point[1] * h)
-        coords.append((x, y))
-        
-    # Draw connections
-    for connection in HAND_CONNECTIONS:
-        start_idx, end_idx = connection
-        if start_idx < len(coords) and end_idx < len(coords):
-            cv2.line(image, coords[start_idx], coords[end_idx], color, thickness)
+    
+    # Handle both 21 (one hand) and 42 (two hands) landmarks
+    n_pts = len(landmarks)
+    for start_offset in range(0, n_pts, 21):
+        pts_part = landmarks[start_offset : start_offset + 21]
+        coords = []
+        for point in pts_part:
+            x, y = int(point[0] * w), int(point[1] * h)
+            coords.append((x, y))
+            
+        # Draw connections
+        for connection in HAND_CONNECTIONS:
+            start_idx, end_idx = connection
+            if start_idx < len(coords) and end_idx < len(coords):
+                cv2.line(image, coords[start_idx], coords[end_idx], color, thickness)
 
 def visualize_dataset_overlaid(valid_items, title="Overlaid Pinch Visualization"):
     """
@@ -87,9 +92,35 @@ def visualize_dataset_overlaid(valid_items, title="Overlaid Pinch Visualization"
             canvas = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
             
             # Overlay each sequence frame
+            # Overlay each sequence frame
             for i, (data, name) in enumerate(valid_items):
                 if f < len(data):
-                    draw_landmarks(canvas, data[f], color=name_to_color[name], thickness=1)
+                    # If 11-channel, use only first 3 for drawing
+                    landmarks = data[f][:, 0:3] if data[f].shape[1] > 3 else data[f]
+                    draw_landmarks(canvas, landmarks, color=name_to_color[name], thickness=1)
+                    
+                    # Visualize Features for the FIRST item only (to avoid clutter)
+                    if i == 0 and data[f].shape[1] >= 11:
+                        # L: 3-6, R: 7-10
+                        # Features are identical for all landmarks in a hand, so pick 0 (wrist)
+                        l_fist = data[f][21, 3] # Left Wrist index 21
+                        l_pinch = data[f][21, 4]
+                        l_thumb_v = data[f][21, 5]
+                        l_index_z_v = data[f][21, 6]
+                        
+                        r_fist = data[f][0, 7] # Right Wrist index 0
+                        r_pinch = data[f][0, 8]
+                        r_thumb_v = data[f][0, 9]
+                        r_index_z_v = data[f][0, 10]
+                        
+                        # Display Text on Bottom
+                        info_y = HEIGHT - 60
+                        cv2.putText(canvas, f"L_Fist: {l_fist:.0f}  | L_Pinch: {l_pinch:.3f} | L_ThumbV: {l_thumb_v:.3f}", 
+                                    (10, info_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                        cv2.putText(canvas, f"R_Fist: {r_fist:.0f}  | R_Pinch: {r_pinch:.3f} | R_ThumbV: {r_thumb_v:.3f}", 
+                                    (10, info_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                        cv2.putText(canvas, f"L_IdxZ_V: {l_index_z_v:.3f} | R_IdxZ_V: {r_index_z_v:.3f}", 
+                                    (10, info_y + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
             
             # Overlay info
             cv2.putText(canvas, f"Frame: {f}/{max_frames}", (10, 30), 
@@ -166,10 +197,20 @@ def validate_dataset(directory_path):
             
             # Validation logic
             current_valid_data = None
-            if data.ndim == 2 and data.shape[1] == 63:
-                current_valid_data = data.reshape(-1, 21, 3)
-            elif data.ndim == 3 and data.shape[1] == 21 and data.shape[2] == 3:
-                current_valid_data = data
+            if data.ndim == 2:
+                if data.shape[1] == 63:
+                    current_valid_data = data.reshape(-1, 21, 3)
+                elif data.shape[1] == 126:
+                    current_valid_data = data.reshape(-1, 42, 3)
+                elif data.shape[1] == 462: # 42 * 11
+                    current_valid_data = data.reshape(-1, 42, 11)
+            elif data.ndim == 3:
+                if data.shape[1] == 21 and data.shape[2] == 3:
+                    current_valid_data = data
+                elif data.shape[1] == 42 and data.shape[2] == 3:
+                    current_valid_data = data
+                elif data.shape[1] == 42 and data.shape[2] == 11:
+                    current_valid_data = data
             
             if current_valid_data is not None:
                 valid_items.append((current_valid_data, name))

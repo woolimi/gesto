@@ -6,13 +6,15 @@ import random
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
-# Standard MediaPipe hand connections
+# Standard MediaPipe hand connections including palm
 HAND_CONNECTIONS = [
     (0, 1), (1, 2), (2, 3), (3, 4),      # Thumb
     (0, 5), (5, 6), (6, 7), (7, 8),      # Index
     (0, 9), (9, 10), (10, 11), (11, 12), # Middle
     (0, 13), (13, 14), (14, 15), (15, 16), # Ring
-    (0, 17), (17, 18), (18, 19), (19, 20)  # Pinky
+    (0, 17), (17, 18), (18, 19), (19, 20), # Pinky
+    # Palm connections
+    (5, 9), (9, 13), (13, 17), (0, 17)
 ]
 
 # Global QApplication instance to avoid re-initialization issues
@@ -38,11 +40,12 @@ def select_directory():
     )
     return dir_path
 
-def draw_landmarks(image, landmarks, color=(0, 255, 0), thickness=2):
+def draw_hand(image, landmarks, label, color=(0, 255, 0), thickness=1):
     """
-    Draws hand landmarks and connections on a canvas.
+    Draws a single hand (21 landmarks) on the provided canvas/ROI.
     """
     h, w, _ = image.shape
+    
     coords = []
     for point in landmarks:
         x, y = int(point[0] * w), int(point[1] * h)
@@ -54,17 +57,37 @@ def draw_landmarks(image, landmarks, color=(0, 255, 0), thickness=2):
         if start_idx < len(coords) and end_idx < len(coords):
             cv2.line(image, coords[start_idx], coords[end_idx], color, thickness)
 
-def visualize_dataset_overlaid(valid_items, title="Overlaid Dataset Visualization"):
+    # Draw points (circles)
+    for j, coord in enumerate(coords):
+        # Wrist is slightly larger
+        radius = 3 if j == 0 else 2
+        cv2.circle(image, coord, radius, color, -1)
+        
+    # Draw hand label at wrist
+    if coords:
+        wrist_coord = coords[0]
+        # Offset label slightly
+        cv2.putText(image, label, (wrist_coord[0] + 5, wrist_coord[1] - 5), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+
+def visualize_dataset_overlaid(valid_items, title="Overlaid Dataset Visualization", start_idx=0, total_count=None):
     """
     Visualizes multiple gesture data sequences overlaid on a single canvas.
     Sequences are colored based on the participant name.
     """
     if not valid_items:
         print("No data to visualize.")
-        return
+        return QMessageBox.StandardButton.Close
+    
+    if total_count is None:
+        total_count = len(valid_items)
+    
+    end_idx = start_idx + len(valid_items)
 
-    # Constants
-    WIDTH, HEIGHT = 640, 480
+    # Revised Layout: Split Screen (Left Panel | Right Panel)
+    PANEL_WIDTH, PANEL_HEIGHT = 640, 480
+    TOTAL_WIDTH = PANEL_WIDTH * 2
+    
     FPS = 30
     delay = int(1000 / FPS)
     
@@ -85,50 +108,114 @@ def visualize_dataset_overlaid(valid_items, title="Overlaid Dataset Visualizatio
     print(f"Starting overlaid visualization of {len(valid_items)} sequences ({len(unique_names)} participants).")
     print("Controls: 'q' to quit, 'p' to pause, any key to resume.")
 
-    while True:
-        for f in range(max_frames):
-            canvas = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-            
-            # Overlay each sequence frame
-            for i, (data, name) in enumerate(valid_items):
-                if f < len(data):
-                    draw_landmarks(canvas, data[f], color=name_to_color[name], thickness=1)
-            
-            # Overlay info
-            cv2.putText(canvas, f"Frame: {f}/{max_frames}", (10, 30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
-            cv2.putText(canvas, f"Count: {len(valid_items)} files ({len(unique_names)} names)", (10, 60), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
-            
-            # Legend for names
-            for j, name in enumerate(unique_names):
-                cv2.putText(canvas, name, (WIDTH - 100, 30 + j * 25), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, name_to_color[name], 2)
-            
-            cv2.imshow(title, canvas)
-            
-            key = cv2.waitKey(delay) & 0xFF
-            if key == ord('q'):
-                cv2.destroyAllWindows()
-                return
-            if key == ord('p'):
-                cv2.waitKey(-1)
+    for f in range(max_frames):
+        canvas = np.zeros((PANEL_HEIGHT, TOTAL_WIDTH, 3), dtype=np.uint8)
+        
+        # Draw Separator
+        cv2.line(canvas, (PANEL_WIDTH, 0), (PANEL_WIDTH, PANEL_HEIGHT), (100, 100, 100), 2)
+        
+        # Headers/Titles
+        cv2.putText(canvas, "LEFT HAND DATA (Left Hand, Ch 21-41)", (10, 25), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+        cv2.putText(canvas, "RIGHT HAND DATA (Right Hand, Ch 0-20)", (PANEL_WIDTH + 10, 25), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+        
+        # Overlays
+        first_valid_features = False # Flag to print features only once per frame
+        
+        for i, (data, name) in enumerate(valid_items):
+            if f < len(data):
+                color = name_to_color[name]
+                
+                # Check shapes and Extract Hands
+                # Assumption: data shape is (Frames, 42, C)
+                # Right Hand: 0-21, Left Hand: 21-42
+                
+                if data[f].shape[0] == 42:
+                    right_hand_pts = data[f][0:21, 0:3]
+                    left_hand_pts = data[f][21:42, 0:3]
+                    
+                    # Draw Left Hand on Left Panel (canvas[:, :640])
+                    # Note: We must create a view or pass the slice.
+                    draw_hand(canvas[:, :PANEL_WIDTH], left_hand_pts, "L", color, thickness=1)
+                    
+                    # Draw Right Hand on Right Panel (canvas[:, 640:])
+                    draw_hand(canvas[:, PANEL_WIDTH:], right_hand_pts, "R", color, thickness=1)
 
-        # Loop or exit using GUI
-        get_qapp()
-        reply = QMessageBox.question(
-            None, 
-            "Replay?", 
-            "Playback finished. Do you want to replay?",
-            QMessageBox.StandardButton.Retry | QMessageBox.StandardButton.Close,
-            QMessageBox.StandardButton.Retry
-        )
-        if reply == QMessageBox.StandardButton.Retry:
-            continue
-        else:
-            break
-            
+                    # Visualize Features for the FIRST item only (to avoid clutter)
+                    if not first_valid_features and data[f].shape[1] >= 11:
+                        first_valid_features = True
+                        
+                        # Extract Features
+                        # Left Hand Features are at indices 21, channels 3-6
+                        l_fist = data[f][21, 3] 
+                        l_pinch = data[f][21, 4]
+                        l_thumb_v = data[f][21, 5]
+                        l_index_z_v = data[f][21, 6]
+                        
+                        # Right Hand Features are at indices 0, channels 7-10
+                        r_fist = data[f][0, 7] 
+                        r_pinch = data[f][0, 8]
+                        r_thumb_v = data[f][0, 9]
+                        r_index_z_v = data[f][0, 10]
+                        
+                        # Display Text on Bottom of Each Panel
+                        info_y = PANEL_HEIGHT - 40
+                        
+                        # Semi-transparent background
+                        cv2.rectangle(canvas, (0, info_y - 20), (TOTAL_WIDTH, PANEL_HEIGHT), (20, 20, 20), -1)
+                        
+                        # Left Info
+                        cv2.putText(canvas, f"Fist:{l_fist:.0f} Pinch:{l_pinch:.3f}", 
+                                    (10, info_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
+                        cv2.putText(canvas, f"ThV:{l_thumb_v:.3f} IdxZV:{l_index_z_v:.3f}", 
+                                    (10, info_y + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
+                        
+                        # Right Info
+                        cv2.putText(canvas, f"Fist:{r_fist:.0f} Pinch:{r_pinch:.3f}", 
+                                    (PANEL_WIDTH + 10, info_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
+                        cv2.putText(canvas, f"ThV:{r_thumb_v:.3f} IdxZV:{r_index_z_v:.3f}", 
+                                    (PANEL_WIDTH + 10, info_y + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
+        
+        # General Info
+        cv2.putText(canvas, f"Frame: {f}/{max_frames}", (10, 50), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        cv2.putText(canvas, f"Batch: {start_idx+1}-{end_idx} / {total_count}", (10, 75), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+        
+        cv2.imshow(title, canvas)
+        
+        key = cv2.waitKey(delay) & 0xFF
+        if key == ord('q'):
+            cv2.destroyAllWindows()
+            return QMessageBox.StandardButton.Close
+        if key == ord('p'):
+            cv2.waitKey(-1)
+
+    # Loop or exit using GUI
+    get_qapp()
+    
+    has_more = end_idx < total_count
+    msg = f"Batch {start_idx+1}-{end_idx} finished."
+    if has_more:
+        msg += f"\nShow next {min(50, total_count - end_idx)} items?"
+        buttons = QMessageBox.StandardButton.Retry | QMessageBox.StandardButton.Close
+        default_btn = QMessageBox.StandardButton.Retry
+    else:
+        msg += "\nAll items shown."
+        buttons = QMessageBox.StandardButton.Close
+        default_btn = QMessageBox.StandardButton.Close
+
+    reply = QMessageBox.question(
+        None, 
+        "Finished", 
+        msg,
+        buttons,
+        default_btn
+    )
+    
     cv2.destroyAllWindows()
+    return reply
 
 def validate_dataset(directory_path):
     """
@@ -169,10 +256,20 @@ def validate_dataset(directory_path):
             
             # Validation logic
             current_valid_data = None
-            if data.ndim == 2 and data.shape[1] == 63:
-                current_valid_data = data.reshape(-1, 21, 3)
-            elif data.ndim == 3 and data.shape[1] == 21 and data.shape[2] == 3:
-                current_valid_data = data
+            if data.ndim == 2:
+                if data.shape[1] == 63:
+                    current_valid_data = data.reshape(-1, 21, 3)
+                elif data.shape[1] == 126:
+                    current_valid_data = data.reshape(-1, 42, 3)
+                elif data.shape[1] == 462: # 42 * 11
+                    current_valid_data = data.reshape(-1, 42, 11)
+            elif data.ndim == 3:
+                if data.shape[1] == 21 and data.shape[2] == 3:
+                    current_valid_data = data
+                elif data.shape[1] == 42 and data.shape[2] == 3:
+                    current_valid_data = data
+                elif data.shape[1] == 42 and data.shape[2] == 11:
+                    current_valid_data = data
             
             if current_valid_data is not None:
                 valid_items.append((current_valid_data, name))
@@ -210,7 +307,18 @@ if __name__ == "__main__":
         valid_items = validate_dataset(target_dir)
         
         if valid_items:
-            visualize_dataset_overlaid(valid_items, title=f"Overlaid: {os.path.basename(target_dir)}")
+            batch_size = 50
+            total_count = len(valid_items)
+            for i in range(0, total_count, batch_size):
+                batch = valid_items[i : i + batch_size]
+                reply = visualize_dataset_overlaid(
+                    batch, 
+                    title=f"Overlaid ({i+1}-{min(i+batch_size, total_count)}): {os.path.basename(target_dir)}",
+                    start_idx=i,
+                    total_count=total_count
+                )
+                if reply != QMessageBox.StandardButton.Retry:
+                    break
         else:
             print("No valid sequences found to visualize.")
     else:

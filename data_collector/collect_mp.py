@@ -56,6 +56,81 @@ else:
 class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
     
+# Feature Indices
+# 0-2: x, y, z (Original)
+# 3: Is_Fist (Left)
+# 4: Pinch_Dist (Left)
+# 5: Thumb_V (Left)
+# 6: Index_Z_V (Left)
+# 7: Is_Fist (Right)
+# 8: Pinch_Dist (Right)
+# 9: Thumb_V (Right)
+# 10: Index_Z_V (Right)
+NUM_CHANNELS = 11
+
+# Landmark Indices (MediaPipe Hands)
+WRIST = 0
+THUMB_TIP = 4
+INDEX_MCP = 5
+INDEX_PIP = 6
+INDEX_TIP = 8
+MIDDLE_PIP = 10
+MIDDLE_TIP = 12
+RING_PIP = 14
+RING_TIP = 16
+PINKY_PIP = 18
+PINKY_TIP = 20
+
+def calculate_euclidean_dist(p1, p2):
+    return np.linalg.norm(np.array(p1) - np.array(p2))
+
+def is_fist(landmarks):
+    """
+    Check if the hand is in a fist state.
+    A hand is considered a fist if ALL 4 fingers (Index, Middle, Ring, Pinky) are curled.
+    Curled condition: Distance(Wrist, Tip) < Distance(Wrist, PIP)
+    """
+    wrist = landmarks[WRIST]
+    
+    fingers = [
+        (INDEX_PIP, INDEX_TIP),
+        (MIDDLE_PIP, MIDDLE_TIP),
+        (RING_PIP, RING_TIP),
+        (PINKY_PIP, PINKY_TIP)
+    ]
+    
+    curled_count = 0
+    for pip_idx, tip_idx in fingers:
+        dist_tip = calculate_euclidean_dist(wrist, landmarks[tip_idx])
+        dist_pip = calculate_euclidean_dist(wrist, landmarks[pip_idx])
+        if dist_tip < dist_pip:
+            curled_count += 1
+            
+    return 1.0 if curled_count == 4 else 0.0
+
+def process_hand_features(landmarks, prev_landmarks):
+    """
+    Calculate 4 features for a single hand (21 landmarks).
+    Features: [Is_Fist, Pinch_Dist, Thumb_V, Index_Z_V]
+    """
+    # 1. Is_Fist
+    fist_val = is_fist(landmarks)
+    
+    # 2. Pinch_Dist (Thumb Tip - Index Tip)
+    pinch_dist = calculate_euclidean_dist(landmarks[THUMB_TIP], landmarks[INDEX_TIP])
+    
+    # 3. Thumb_V (y velocity)
+    thumb_v = 0.0
+    if prev_landmarks is not None:
+        thumb_v = landmarks[THUMB_TIP][1] - prev_landmarks[THUMB_TIP][1]
+        
+    # 4. Index_Z_V (z velocity)
+    index_z_v = 0.0
+    if prev_landmarks is not None:
+        index_z_v = landmarks[INDEX_TIP][2] - prev_landmarks[INDEX_TIP][2]
+        
+    return [fist_val, pinch_dist, thumb_v, index_z_v]
+    
     def __init__(self):
         super().__init__()
         self._run_flag = True
@@ -242,7 +317,9 @@ class LegacyCollector(QMainWindow):
         self._font_cache = {}  # (size) -> ImageFont
         self._scenario_header_cache_key = None
         self._scenario_header_cache_img = None
-        self._zero_hand = [[0.0, 0.0, 0.0] for _ in range(21)]
+        self._zero_hand = [[0.0] * NUM_CHANNELS for _ in range(21)]
+        self._prev_right = None
+        self._prev_left = None
         
         # MediaPipe Setup — 두 손 감지 (녹화 데이터: 42 랜드마크 = 손1 21 + 손2 21)
         self.mp_hands = mp.solutions.hands
@@ -522,21 +599,56 @@ class LegacyCollector(QMainWindow):
                 cv2.putText(cv_img, episode_text, (10, 85), cv2.FONT_HERSHEY_SIMPLEX, scale_e, (255, 255, 255), thick_e)
             # ---------------
 
-            # Recording Logic: 두 손 랜드마크 저장. 손 순서를 handedness로 고정 (Right=0~20, Left=21~41).
-            # 한손 주먹·한손 스와이프처럼 감지 순서가 바뀌어도 항상 같은 슬롯에 들어가도록 함.
+                if len(self.recording_frames) >= self.total_frames:
+                    self.stop_recording()
+
+            # Recording Logic: 11-channel data (3 original + 8 features)
             if self.is_recording:
-                right_slot = self._zero_hand
-                left_slot = self._zero_hand
+                right_landmarks = self._zero_hand[0:21] # Should be [21, 3] for feature calc if not None
+                # Actually, landmarks are [x,y,z]. Slot needs to be [21, 11].
+                
+                # Default xyz slots
+                right_xyz = [[0.0, 0.0, 0.0] for _ in range(21)]
+                left_xyz = [[0.0, 0.0, 0.0] for _ in range(21)]
+                
                 if results and results.multi_hand_landmarks and results.multi_handedness:
                     for hlm, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
                         label = handedness.classification[0].label if handedness.classification else ""
                         pts = [[lm.x, lm.y, lm.z] for lm in hlm.landmark]
                         if label == "Right":
-                            right_slot = pts
+                            right_xyz = pts
                         else:
-                            left_slot = pts
-                frame_data = right_slot + left_slot
-                self.recording_frames.append(frame_data)
+                            left_xyz = pts
+                
+                # Calculate Features
+                left_feats = process_hand_features(left_xyz, self._prev_left)
+                right_feats = process_hand_features(right_xyz, self._prev_right)
+                
+                # Update prev state
+                self._prev_right = right_xyz
+                self._prev_left = left_xyz
+                
+                # Construct (42, 11) data for this frame
+                frame_data_11 = []
+                # Right Hand Slot (Indices 0-20)
+                for pt in right_xyz:
+                    # Ch 0-2: xyz, Ch 3-6: Left Features, Ch 7-10: Right Features
+                    # Wait, the user said:
+                    # Channel 3: Is_Fist (Left)
+                    # Channel 4: Pinch_Dist (Left)
+                    # ...
+                    # Channel 7: Is_Fist (Right)
+                    # ...
+                    # This is for ALL landmarks.
+                    full_pt = pt + left_feats + right_feats
+                    frame_data_11.append(full_pt)
+                
+                # Left Hand Slot (Indices 21-41)
+                for pt in left_xyz:
+                    full_pt = pt + left_feats + right_feats
+                    frame_data_11.append(full_pt)
+
+                self.recording_frames.append(frame_data_11)
                 
                 if len(self.recording_frames) >= self.total_frames:
                     self.stop_recording()
@@ -652,6 +764,8 @@ class LegacyCollector(QMainWindow):
     def start_recording(self):
         self.is_recording = True
         self.recording_frames = [] # Reset buffer
+        self._prev_right = None # Reset velocity states
+        self._prev_left = None
         self.status_label.setText(f"Episode {self.current_episode + 1}/{self.target_episodes}: Recording...")
 
     def stop_recording(self):
@@ -689,7 +803,7 @@ class LegacyCollector(QMainWindow):
         filepath = os.path.join(base_dir, filename)
 
         
-        # Save as (Frames, 21, 3)
+        # Save as (Frames, 42, 11)
         data_To_save = np.array(self.recording_frames, dtype=np.float32)
         
         try:
