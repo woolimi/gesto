@@ -6,6 +6,7 @@ Ubuntu: tflite-runtime 또는 tensorflow. Mac: tensorflow (tf.lite).
 """
 
 import os
+import sys
 import time
 from collections import deque
 from typing import Any, Callable, Optional
@@ -16,36 +17,17 @@ import mediapipe as mp
 
 import config
 
+# 프로젝트 루트를 path에 추가 (lib 임포트용)
+_root = os.path.dirname(os.path.abspath(config.__file__))
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
+from lib.hand_features import NUM_CHANNELS, process_hand_features, is_fist_debug
+
 # 학습 시와 동일 (data_trainer/train.py) — 두 손: 42 랜드마크, 30프레임(1초)
 SEQUENCE_LENGTH = 30
 LANDMARKS_COUNT = 42
-COORDS_COUNT = 11
-INPUT_SHAPE = (SEQUENCE_LENGTH, LANDMARKS_COUNT * COORDS_COUNT)
-
-# Feature Indices
-# 0-2: x, y, z
-# 3: Is_Fist (Left)
-# 4: Pinch_Dist (Left)
-# 5: Thumb_V (Left)
-# 6: Index_Z_V (Left)
-# 7: Is_Fist (Right)
-# 8: Pinch_Dist (Right)
-# 9: Thumb_V (Right)
-# 10: Index_Z_V (Right)
-NUM_CHANNELS = 11
-
-# Landmark Indices (MediaPipe Hands)
-WRIST = 0
-THUMB_TIP = 4
-INDEX_MCP = 5
-INDEX_PIP = 6
-INDEX_TIP = 8
-MIDDLE_PIP = 10
-MIDDLE_TIP = 12
-RING_PIP = 14
-RING_TIP = 16
-PINKY_PIP = 18
-PINKY_TIP = 20
+INPUT_SHAPE = (SEQUENCE_LENGTH, LANDMARKS_COUNT * NUM_CHANNELS)
 
 
 def _load_gesture_classes(models_dir: str, base_name: str = "lstm_legacy") -> list:
@@ -60,6 +42,9 @@ def _load_gesture_classes(models_dir: str, base_name: str = "lstm_legacy") -> li
         "Pinch_In_Left", "Pinch_In_Right",
         "Pinch_Out_Left", "Pinch_Out_Right",
         "Swipe_Left", "Swipe_Right",
+        "Play_Pause_Left", "Play_Pause_Right",
+        "Volume_Down_Left", "Volume_Down_Right",
+        "Volume_Up_Left", "Volume_Up_Right",
     ]
 
 
@@ -140,7 +125,7 @@ class LstmGestureBase:
         
         # --- Optimization: Pre-allocated Circular Buffer ---
         # (SEQUENCE_LENGTH, 462) shaped buffer
-        self._buffer_array = np.zeros((SEQUENCE_LENGTH, LANDMARKS_COUNT * COORDS_COUNT), dtype=np.float32)
+        self._buffer_array = np.zeros((SEQUENCE_LENGTH, LANDMARKS_COUNT * NUM_CHANNELS), dtype=np.float32)
         self._buffer_count = 0
         
         # Velocity calculation state
@@ -149,55 +134,9 @@ class LstmGestureBase:
         
         # Pre-allocated feature array to avoid re-allocation
         self._feature_array = np.zeros((LANDMARKS_COUNT, NUM_CHANNELS), dtype=np.float32)
-
-    def _calculate_euclidean_dist(self, p1, p2):
-        return np.linalg.norm(p1 - p2)
-
-    def _is_fist(self, landmarks):
-        """
-        Check if the hand is in a fist state (Robust, Rotation-Invariant).
-        Condition: Dist(Wrist, Tip) < Dist(Wrist, PIP) for ALL 4 fingers.
-        """
-        wrist = landmarks[WRIST]
-        
-        fingers = [
-            (INDEX_PIP, INDEX_TIP),
-            (MIDDLE_PIP, MIDDLE_TIP),
-            (RING_PIP, RING_TIP),
-            (PINKY_PIP, PINKY_TIP)
-        ]
-        
-        curled_count = 0
-        for pip_idx, tip_idx in fingers:
-            dist_tip = self._calculate_euclidean_dist(wrist, landmarks[tip_idx])
-            dist_pip = self._calculate_euclidean_dist(wrist, landmarks[pip_idx])
-            if dist_tip < dist_pip:
-                curled_count += 1
-                
-        return 1.0 if curled_count == 4 else 0.0
-
-    def _process_hand_features(self, landmarks, prev_landmarks):
-        """
-        Calculate 4 features for a single hand (21 landmarks).
-        Features: [Is_Fist, Pinch_Dist, Thumb_V, Index_Z_V]
-        """
-        # 1. Is_Fist
-        fist_val = self._is_fist(landmarks)
-        
-        # 2. Pinch_Dist (Thumb Tip - Index Tip)
-        pinch_dist = self._calculate_euclidean_dist(landmarks[THUMB_TIP], landmarks[INDEX_TIP])
-        
-        # 3. Thumb_V (y velocity)
-        thumb_v = 0.0
-        if prev_landmarks is not None:
-            thumb_v = landmarks[THUMB_TIP][1] - prev_landmarks[THUMB_TIP][1]
-            
-        # 4. Index_Z_V (z velocity)
-        index_z_v = 0.0
-        if prev_landmarks is not None:
-            index_z_v = landmarks[INDEX_TIP][2] - prev_landmarks[INDEX_TIP][2]
-            
-        return [fist_val, pinch_dist, thumb_v, index_z_v]
+        # GESTURE_DEBUG: 마지막 프레임 11채널 평균, is_fist 손가락별 판정
+        self._last_11ch_means = [0.0] * NUM_CHANNELS
+        self._last_fist_debug = {"left": (0.0, [False] * 4), "right": (0.0, [False] * 4)}
 
     @property
     def cooldown_until(self) -> float:
@@ -208,6 +147,16 @@ class LstmGestureBase:
     def last_probs(self) -> dict:
         """마지막 인식 시 모든 클래스별 확률 (클래스명 → 0~1). UI 표시용."""
         return self._last_probs.copy()
+
+    @property
+    def last_11ch_means(self) -> list:
+        """GESTURE_DEBUG용. 마지막 프레임 11채널 값(채널별 42 랜드마크 평균)."""
+        return list(self._last_11ch_means)
+
+    @property
+    def last_fist_debug(self) -> dict:
+        """GESTURE_DEBUG용. 마지막 프레임 왼/오 is_fist 판정 및 손가락별 접힘: {"left": (0|1, [4 bool]), "right": ...}."""
+        return dict(self._last_fist_debug)
 
     def _get_tflite_interpreter_class(self):
         """tflite_runtime(우분투) 또는 tensorflow.lite(맥/우분투) 반환."""
@@ -256,10 +205,12 @@ class LstmGestureBase:
         right_hand = landmarks[0:21, :]
         left_hand = landmarks[21:42, :]
         
-        # Calculate Features
-        left_feats = self._process_hand_features(left_hand, self._prev_left)
-        right_feats = self._process_hand_features(right_hand, self._prev_right)
-        
+        # Calculate Features (lib: collect_mp와 동일 파이프라인)
+        left_feats = process_hand_features(left_hand, self._prev_left)
+        right_feats = process_hand_features(right_hand, self._prev_right)
+        if getattr(config, "GESTURE_DEBUG", False):
+            self._last_fist_debug["left"] = is_fist_debug(left_hand)
+            self._last_fist_debug["right"] = is_fist_debug(right_hand)
         # Update state
         self._prev_right = right_hand.copy()
         self._prev_left = left_hand.copy()
@@ -293,16 +244,24 @@ class LstmGestureBase:
         return None, 0.0
 
     def _inference(self, landmarks: np.ndarray) -> tuple[Optional[str], float]:
-        """(42, 3) landmarks를 받아 LSTM 추론 수행."""
+        """(42, 3) landmarks를 받아 LSTM 추론 수행. 매 프레임 버퍼에 추가해 시퀀스 연속성 유지; 추론 결과만 '다른 손 주먹'으로 검사."""
         # (42, 3) → (42, 11) Feature Extraction
         data_11ch = self._construct_11_channel_data(landmarks)
 
+        # 버퍼는 매 프레임 갱신 (전제조건으로 막으면 시퀀스 끊김·같은 30프레임만 반복 추론되어 성능 저하)
         # (42, 11) → (1, 42, 11) 정규화 후 (462,)로 버퍼에 추가
-        # PRE-OPTIMIZATION: data = np.expand_dims(data_11ch, axis=0); data = _normalize_landmarks(data)
-        # OPTIMIZED: Inline normalization to reduce expansions
         data_11ch = _normalize_landmarks(data_11ch[np.newaxis, ...])[0]
-        row = data_11ch.reshape(-1) # reshape on pre-allocated/just-normalized array is cheap
-        
+        row = data_11ch.reshape(-1)
+
+        # GESTURE_DEBUG: 채널별 평균 저장
+        for c in range(NUM_CHANNELS):
+            self._last_11ch_means[c] = float(np.mean(row[c * LANDMARKS_COUNT : (c + 1) * LANDMARKS_COUNT]))
+
+        # 쿨다운 중에는 버퍼에 넣지 않음 (같은 제스처가 연속 인식되는 것 방지)
+        now = time.monotonic()
+        if now < self._cooldown_until:
+            return None, 0.0
+
         # Circular buffer management
         if self._buffer_count < SEQUENCE_LENGTH:
             self._buffer_array[self._buffer_count] = row
@@ -340,12 +299,57 @@ class LstmGestureBase:
         now = time.monotonic()
         if now < self._cooldown_until:
             return None, 0.0
-        self._cooldown_until = now + self._cooldown_sec
 
-        return self._gesture_classes[pred_idx], confidence
+        gesture_name = self._gesture_classes[pred_idx]
+        # LSTM 사용 시: 제스처 손이 아닌 "다른 손"이 반드시 주먹이어야 함.
+        # 양손 모두 보일 때만 제스처 인정 (한 손만 보이면 무시).
+        row = self._buffer_array[-1]
+        # 왼손 fist: 랜드마크 21-41의 채널 3, 오른손 fist: 랜드마크 0-20의 채널 7
+        left_fist = float(np.mean([row[i * NUM_CHANNELS + 3] for i in range(21, LANDMARKS_COUNT)]))
+        right_fist = float(np.mean([row[i * NUM_CHANNELS + 7] for i in range(21)]))
+        # 양손 가시성: xyz 채널(0-2)의 절댓값으로 판단
+        left_xyz_max = max(
+            (max(abs(row[i * NUM_CHANNELS + 0]), abs(row[i * NUM_CHANNELS + 1]), abs(row[i * NUM_CHANNELS + 2]))
+             for i in range(21, LANDMARKS_COUNT))
+        )
+        right_xyz_max = max(
+            (max(abs(row[i * NUM_CHANNELS + 0]), abs(row[i * NUM_CHANNELS + 1]), abs(row[i * NUM_CHANNELS + 2]))
+             for i in range(21))
+        )
+        left_visible = left_xyz_max > 0.01
+        right_visible = right_xyz_max > 0.01
+        
+        # 양손 모두 보여야 제스처 인정
+        if not (left_visible and right_visible):
+            return None, 0.0
+        
+        # 다른 손이 주먹이어야 함. Swipe만 규칙이 다름.
+        # Swipe_Left: 왼손 주먹, 오른손이 스와이프 → 왼손 fist
+        # Swipe_Right: 오른손 주먹, 왼손이 스와이프 → 오른손 fist
+        # 그 외 (Pinch, Play_Pause, Volume 등): _Left = 왼손이 제스처 → 오른손 주먹, _Right = 오른손 제스처 → 왼손 주먹
+        if gesture_name.startswith("Swipe_"):
+            if gesture_name.endswith("_Left"):
+                if left_fist < 0.5:
+                    return None, 0.0
+            elif gesture_name.endswith("_Right"):
+                if right_fist < 0.5:
+                    return None, 0.0
+        else:
+            # Pinch_In_Left, Play_Pause_Left 등: 제스처하는 손의 반대가 주먹
+            if gesture_name.endswith("_Left"):
+                if right_fist < 0.5:
+                    return None, 0.0
+            elif gesture_name.endswith("_Right"):
+                if left_fist < 0.5:
+                    return None, 0.0
+
+        self._cooldown_until = now + self._cooldown_sec
+        return gesture_name, confidence
 
     def close(self) -> None:
         self._buffer_count = 0
         self._buffer_array.fill(0)
         self._prev_right = None
         self._prev_left = None
+        self._last_11ch_means = [0.0] * NUM_CHANNELS
+        self._last_fist_debug = {"left": (0.0, [False] * 4), "right": (0.0, [False] * 4)}

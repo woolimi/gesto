@@ -18,7 +18,7 @@ class ModeDetectionWorker(QThread):
     """모션 감지 중일 때만 프레임을 받아, 현재 모드 감지기로 제스처/자세 판별. gesture_detected 시그널."""
 
     gesture_detected = pyqtSignal(str, float, float)
-    gesture_debug_updated = pyqtSignal(dict, float)
+    gesture_debug_updated = pyqtSignal(dict, float, object, object)  # probs, thr, channels_11, fist_debug
 
     def __init__(
         self,
@@ -88,7 +88,9 @@ class ModeDetectionWorker(QThread):
                         if self._get_sensitivity is not None
                         else 0.0
                     )
-                    self.gesture_debug_updated.emit(probs, thr)
+                    channels_11 = getattr(self._detector, "last_11ch_means", None)
+                    fist_debug = getattr(self._detector, "last_fist_debug", None)
+                    self.gesture_debug_updated.emit(probs, thr, channels_11, fist_debug)
                     
         if self._detector is not None:
             self._detector.close()

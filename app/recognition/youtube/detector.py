@@ -37,6 +37,16 @@ class YouTubeDetector:
         """마지막 인식 시 모든 클래스별 확률. UI 표시용."""
         return getattr(self._base, "last_probs", {}) if self._base else {}
 
+    @property
+    def last_11ch_means(self):
+        """GESTURE_DEBUG용. 11채널 평균."""
+        return getattr(self._base, "last_11ch_means", None) if self._base else None
+
+    @property
+    def last_fist_debug(self):
+        """GESTURE_DEBUG용. is_fist 손가락별 판정."""
+        return getattr(self._base, "last_fist_debug", None) if self._base else None
+
     def close(self) -> None:
         if self._base is not None:
             self._base.close()

@@ -939,3 +939,7 @@ class MainWindow(QMainWindow):
 
         if self.is_detecting:
             if gesture_name: self.top_bar.update_gesture(gesture_name)
+
+    def update_gesture_debug(self, probs: dict, threshold: float, channels_11=None, fist_debug=None):
+        """GESTURE_DEBUG 시 제스처 확률·threshold·11채널·is_fist 판정을 웹캠 패널 디버그 라벨에 표시."""
+        self.webcam_panel.gesture_display.update_debug(probs, threshold, channels_11, fist_debug)

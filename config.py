@@ -25,7 +25,7 @@ CAMERA_FPS = 30
 GESTURE_DETECTION_FPS = 30
 GESTURE_SEQUENCE_LENGTH = 30  # LSTM 입력 시퀀스 길이
 # True면 UI에 제스처별 확률·threshold 디버그 표시 (기존 UI 유지)
-GESTURE_DEBUG = False
+GESTURE_DEBUG = True
 # 모드별 쿨다운(초). 제스처 인식 후 이 시간 동안 새 제스처 인식 안 함
 PPT_COOLDOWN_SEC = 1.0
 YOUTUBE_COOLDOWN_SEC = 2.0

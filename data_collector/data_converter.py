@@ -1,86 +1,20 @@
 import os
+import sys
 import glob
 import numpy as np
+
+# 프로젝트 루트를 path에 추가 (lib 임포트용)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from lib.hand_features import (
+    NUM_CHANNELS,
+    process_hand_features,
+)
 
 # --- Configuration ---
 DATA_ROOT = os.path.join(os.path.dirname(__file__), "data")
 OUTPUT_ROOT = os.path.join(os.path.dirname(__file__), "data", "converted_gesture")
 
-# Feature Indices
-# 0-2: x, y, z (Original)
-# 3: Is_Fist (Left)
-# 4: Pinch_Dist (Left)
-# 5: Thumb_V (Left)
-# 6: Index_Z_V (Left)
-# 7: Is_Fist (Right)
-# 8: Pinch_Dist (Right)
-# 9: Thumb_V (Right)
-# 10: Index_Z_V (Right)
-NUM_CHANNELS = 11
-
-# Landmark Indices (MediaPipe Hands)
-WRIST = 0
-THUMB_TIP = 4
-INDEX_MCP = 5
-INDEX_PIP = 6
-INDEX_TIP = 8
-MIDDLE_PIP = 10
-MIDDLE_TIP = 12
-RING_PIP = 14
-RING_TIP = 16
-PINKY_PIP = 18
-PINKY_TIP = 20
-
-def calculate_euclidean_dist(p1, p2):
-    return np.linalg.norm(p1 - p2)
-
-def is_fist(landmarks):
-    """
-    Check if the hand is in a fist state.
-    A hand is considered a fist if ALL 4 fingers (Index, Middle, Ring, Pinky) are curled.
-    Curled condition: Distance(Wrist, Tip) < Distance(Wrist, PIP)
-    This intrinsic metric is robust to hand rotation.
-    """
-    wrist = landmarks[WRIST]
-    
-    fingers = [
-        (INDEX_PIP, INDEX_TIP),
-        (MIDDLE_PIP, MIDDLE_TIP),
-        (RING_PIP, RING_TIP),
-        (PINKY_PIP, PINKY_TIP)
-    ]
-    
-    curled_count = 0
-    for pip_idx, tip_idx in fingers:
-        dist_tip = calculate_euclidean_dist(wrist, landmarks[tip_idx])
-        dist_pip = calculate_euclidean_dist(wrist, landmarks[pip_idx])
-        if dist_tip < dist_pip:
-            curled_count += 1
-            
-    return 1.0 if curled_count == 4 else 0.0
-
-def process_hand_features(landmarks, prev_landmarks):
-    """
-    Calculate 4 features for a single hand (21 landmarks).
-    Features: [Is_Fist, Pinch_Dist, Thumb_V, Index_Z_V]
-    """
-    # 1. Is_Fist
-    fist_val = is_fist(landmarks)
-    
-    # 2. Pinch_Dist (Thumb Tip - Index Tip)
-    pinch_dist = calculate_euclidean_dist(landmarks[THUMB_TIP], landmarks[INDEX_TIP])
-    
-    # 3. Thumb_V (y velocity)
-    thumb_v = 0.0
-    if prev_landmarks is not None:
-        thumb_v = landmarks[THUMB_TIP][1] - prev_landmarks[THUMB_TIP][1]
-        
-    # 4. Index_Z_V (z velocity)
-    index_z_v = 0.0
-    if prev_landmarks is not None:
-        index_z_v = landmarks[INDEX_TIP][2] - prev_landmarks[INDEX_TIP][2]
-        
-    return [fist_val, pinch_dist, thumb_v, index_z_v]
 
 def convert_file(file_path):
     try:

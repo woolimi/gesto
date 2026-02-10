@@ -38,15 +38,27 @@ class GestureDisplayWidget(QWidget):
         self.gesture_label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         layout.addWidget(self.gesture_label)
 
-        # GESTURE_DEBUG 시 제스처별 확률·threshold 표시 (한 줄, 작은 글씨)
+        # GESTURE_DEBUG 시 제스처별 확률·threshold·11채널 표시 (가독성 위해 큰 글씨·최소 높이)
         self.debug_label = QLabel("")
         self.debug_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.debug_label.setFont(QFont("Monospace", 9))
+        self.debug_label.setFont(QFont("Monospace", 13))
+        self.debug_label.setMinimumHeight(78)
         self.debug_label.setStyleSheet(
-            f"color: rgba(0, 255, 255, 200); background-color: transparent; border: none;"
+            "color: rgba(0, 255, 255, 220); background-color: rgba(0, 0, 0, 180); "
+            "border: none; padding: 6px 8px;"
         )
-        self.debug_label.setVisible(getattr(config, "GESTURE_DEBUG", False))
+        is_debug = getattr(config, "GESTURE_DEBUG", False)
+        self.debug_label.setVisible(is_debug)
+        self.debug_label.setWordWrap(True)
         layout.addWidget(self.debug_label)
+        if is_debug:
+            self.setMinimumHeight(130)
+        # 11채널 이름 (lib/hand_features 순서)
+        self._ch_names = (
+            "x", "y", "z",
+            "IsFist_L", "Pinch_L", "ThumbV_L", "IdxZ_L",
+            "IsFist_R", "Pinch_R", "ThumbV_R", "IdxZ_R",
+        )
 
         self.setLayout(layout)
         # Remove widget-level background
@@ -81,6 +93,13 @@ class GestureDisplayWidget(QWidget):
         font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 105)
         self.gesture_label.setFont(font)
 
+        # 디버그 라벨 폰트도 스케일 (가독성)
+        if getattr(config, "GESTURE_DEBUG", False):
+            debug_font = QFont("Monospace", 13)
+            debug_font.setPixelSize(max(12, int(14 * scale)))
+            self.debug_label.setFont(debug_font)
+            self.debug_label.setMinimumHeight(max(78, int(40 * scale)))
+
         # 상태에 따른 스타일 업데이트 (패딩 등 스케일링 적용)
         self._refresh_style(scale)
 
@@ -110,6 +129,35 @@ class GestureDisplayWidget(QWidget):
     def set_threshold(self, threshold: float):
         """Main Window에서 호출: 현재 감도 기준 임계값 업데이트."""
         self._current_threshold = threshold
+
+    def _format_fist_debug(self, fist_debug) -> str:
+        """fist_debug = {"left": (0|1, ...), "right": ...} → Fist: L=1 R=0 형태만 표시."""
+        if not fist_debug:
+            return ""
+        parts = []
+        for hand in ("left", "right"):
+            short = "L" if hand == "left" else "R"
+            val, _ = fist_debug.get(hand, (0.0, []))
+            parts.append(f"{short}={int(round(val))}")
+        return "Fist: " + "  ".join(parts)
+
+    def update_debug(self, probs: dict, threshold: float, channels_11=None, fist_debug=None):
+        """GESTURE_DEBUG 시: 확률 상위 3개, 왼/오 주먹값, is_fist 실시간 손가락별 판정 표시."""
+        if not getattr(config, "GESTURE_DEBUG", False):
+            return
+        self.debug_label.setVisible(True)
+        parts = [f"Thr:{threshold:.2f}"]
+        if probs:
+            top3 = sorted(probs.items(), key=lambda x: -x[1])[:3]
+            parts.append("|")
+            for k, v in top3:
+                parts.append(f"{k}={v:.2f}")
+        line1 = " ".join(parts)
+        lines = [line1]
+        fist_line = self._format_fist_debug(fist_debug)
+        if fist_line:
+            lines.append(fist_line)
+        self.debug_label.setText("\n".join(lines))
 
 
     def _clear_gesture_label(self):

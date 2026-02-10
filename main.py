@@ -100,7 +100,9 @@ def main():
     # 모드별 감지 → Mode Controller + UI
     mode_detection.gesture_detected.connect(mode_controller.on_gesture)
     mode_detection.gesture_detected.connect(window.update_gesture)
-    
+    if config.GESTURE_DEBUG:
+        mode_detection.gesture_debug_updated.connect(window.update_gesture_debug)
+
     # 제스처 인식 성공 시 효과음
     last_played_gesture = [None]
     def on_gesture_detected(gesture, confidence, cooldown_until):

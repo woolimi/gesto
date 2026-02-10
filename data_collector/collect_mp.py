@@ -16,6 +16,23 @@ from PyQt6.QtGui import QImage, QPixmap
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import config
+from lib.hand_features import (
+    NUM_CHANNELS,
+    WRIST,
+    THUMB_TIP,
+    INDEX_MCP,
+    INDEX_PIP,
+    INDEX_TIP,
+    MIDDLE_PIP,
+    MIDDLE_TIP,
+    RING_PIP,
+    RING_TIP,
+    PINKY_PIP,
+    PINKY_TIP,
+    calculate_euclidean_dist,
+    is_fist,
+    process_hand_features,
+)
 
 # 시나리오 매니저 및 허용 제스처 목록 임포트
 try:
@@ -55,82 +72,7 @@ else:
 
 class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
-    
-# Feature Indices
-# 0-2: x, y, z (Original)
-# 3: Is_Fist (Left)
-# 4: Pinch_Dist (Left)
-# 5: Thumb_V (Left)
-# 6: Index_Z_V (Left)
-# 7: Is_Fist (Right)
-# 8: Pinch_Dist (Right)
-# 9: Thumb_V (Right)
-# 10: Index_Z_V (Right)
-NUM_CHANNELS = 11
 
-# Landmark Indices (MediaPipe Hands)
-WRIST = 0
-THUMB_TIP = 4
-INDEX_MCP = 5
-INDEX_PIP = 6
-INDEX_TIP = 8
-MIDDLE_PIP = 10
-MIDDLE_TIP = 12
-RING_PIP = 14
-RING_TIP = 16
-PINKY_PIP = 18
-PINKY_TIP = 20
-
-def calculate_euclidean_dist(p1, p2):
-    return np.linalg.norm(np.array(p1) - np.array(p2))
-
-def is_fist(landmarks):
-    """
-    Check if the hand is in a fist state.
-    A hand is considered a fist if ALL 4 fingers (Index, Middle, Ring, Pinky) are curled.
-    Curled condition: Distance(Wrist, Tip) < Distance(Wrist, PIP)
-    """
-    wrist = landmarks[WRIST]
-    
-    fingers = [
-        (INDEX_PIP, INDEX_TIP),
-        (MIDDLE_PIP, MIDDLE_TIP),
-        (RING_PIP, RING_TIP),
-        (PINKY_PIP, PINKY_TIP)
-    ]
-    
-    curled_count = 0
-    for pip_idx, tip_idx in fingers:
-        dist_tip = calculate_euclidean_dist(wrist, landmarks[tip_idx])
-        dist_pip = calculate_euclidean_dist(wrist, landmarks[pip_idx])
-        if dist_tip < dist_pip:
-            curled_count += 1
-            
-    return 1.0 if curled_count == 4 else 0.0
-
-def process_hand_features(landmarks, prev_landmarks):
-    """
-    Calculate 4 features for a single hand (21 landmarks).
-    Features: [Is_Fist, Pinch_Dist, Thumb_V, Index_Z_V]
-    """
-    # 1. Is_Fist
-    fist_val = is_fist(landmarks)
-    
-    # 2. Pinch_Dist (Thumb Tip - Index Tip)
-    pinch_dist = calculate_euclidean_dist(landmarks[THUMB_TIP], landmarks[INDEX_TIP])
-    
-    # 3. Thumb_V (y velocity)
-    thumb_v = 0.0
-    if prev_landmarks is not None:
-        thumb_v = landmarks[THUMB_TIP][1] - prev_landmarks[THUMB_TIP][1]
-        
-    # 4. Index_Z_V (z velocity)
-    index_z_v = 0.0
-    if prev_landmarks is not None:
-        index_z_v = landmarks[INDEX_TIP][2] - prev_landmarks[INDEX_TIP][2]
-        
-    return [fist_val, pinch_dist, thumb_v, index_z_v]
-    
     def __init__(self):
         super().__init__()
         self._run_flag = True
@@ -160,7 +102,7 @@ def process_hand_features(landmarks, prev_landmarks):
             frame = self._latest_frame
             self._latest_frame = None
         return frame
-        
+
     def run(self):
         while self._run_flag:
             ret, cv_img = self.cap.read()
@@ -172,7 +114,7 @@ def process_hand_features(landmarks, prev_landmarks):
 
             # Yield a bit to avoid burning 100% CPU if the camera is fast.
             time.sleep(0.001)
-            
+
     def stop(self):
         self._run_flag = False
         self.wait()
@@ -598,9 +540,6 @@ class LegacyCollector(QMainWindow):
                 cv2.putText(cv_img, status_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, scale_s, color, thick_s)
                 cv2.putText(cv_img, episode_text, (10, 85), cv2.FONT_HERSHEY_SIMPLEX, scale_e, (255, 255, 255), thick_e)
             # ---------------
-
-                if len(self.recording_frames) >= self.total_frames:
-                    self.stop_recording()
 
             # Recording Logic: 11-channel data (3 original + 8 features)
             if self.is_recording:
