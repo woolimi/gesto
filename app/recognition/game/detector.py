@@ -156,52 +156,39 @@ def _hand_label_from_result(result, index: int) -> str:
 
 
 class GameDetector:
-    """Game 모드: 검지 포인팅으로 직진/후진/좌회전/우회전 방향 감지. mp.solutions.hands (Solution API) 사용."""
+    """Game 모드: 검지 포인팅으로 직진/후진/좌회전/우회전 방향 감지."""
 
     def __init__(self):
         # 손별 각도 EMA (Left/Right 기준). 프레임마다 손 순서가 바뀌어도 동일 손끼리 스무딩
         self._angle_ema: dict[str, Optional[float]] = {"Left": None, "Right": None}
-        self._mp_hands = mp.solutions.hands
-        self._hands = self._mp_hands.Hands(
-            static_image_mode=False,
-            max_num_hands=2,
-            min_detection_confidence=0.25,
-            min_tracking_confidence=0.25,
-        )
 
-    def _detect(self, frame_bgr):
-        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        results = self._hands.process(rgb)
-        out = SimpleNamespace()
-        out.hand_landmarks = [h.landmark for h in (results.multi_hand_landmarks or [])]
-        out.handedness = results.multi_handedness or []
-        return out
-
-    def process(self, frame_bgr) -> tuple[Optional[str], float]:
+    def process_landmarks(self, multi_hand_landmarks, multi_handedness) -> tuple[Optional[str], float]:
         """
-        BGR 프레임에서 자세/제스처 판별.
-        검지만 방향을 가리키고 나머지(중지·약지·소지) 접힌 상태일 때만 인식.
+        추출된 landmarks에서 자세/제스처 판별.
         반환: (None, 0.0) 또는 (gesture_name, 1.0).
         """
-        result = self._detect(frame_bgr)
-        if not result.hand_landmarks:
+        if not multi_hand_landmarks:
             return None, 0.0
 
         directions = []
-        for i, hand_landmarks in enumerate(result.hand_landmarks):
-            hand_key = _hand_label_from_result(result, i)
+        for i, hand_landmarks in enumerate(multi_hand_landmarks):
+            # handedness 정보를 이용하기 위해 가상의 result 객체 생성 (기존 함수 재사용용)
+            from types import SimpleNamespace
+            fake_res = SimpleNamespace(handedness=multi_handedness)
+            hand_key = _hand_label_from_result(fake_res, i)
+            
             if hand_key not in self._angle_ema:
                 self._angle_ema[hand_key] = None
 
-            scale = _hand_size(hand_landmarks)
-            if not _is_index_pointing_gesture(hand_landmarks, scale):
+            scale = _hand_size(hand_landmarks.landmark)
+            if not _is_index_pointing_gesture(hand_landmarks.landmark, scale):
                 self._angle_ema[hand_key] = None
                 continue
-            raw_angle = _index_angle_deg(hand_landmarks)
+            raw_angle = _index_angle_deg(hand_landmarks.landmark)
             if raw_angle is None:
                 self._angle_ema[hand_key] = None
                 continue
-            # EMA 스무딩 (손 identity 기준이라 프레임마다 순서가 바뀌어도 왼손/오른손 각각 유지)
+            # EMA 스무딩
             if self._angle_ema[hand_key] is None:
                 self._angle_ema[hand_key] = raw_angle
             else:
@@ -210,8 +197,7 @@ class GameDetector:
                     self._angle_ema[hand_key] + (1.0 - _ANGLE_EMA_ALPHA) * diff
                 )
             d = _angle_to_direction(self._angle_ema[hand_key])
-            # back(검지 아래)은 주먹과 구분: TIP이 PIP보다 충분히 아래에 있을 때만 인정
-            if d == "back" and not _is_index_really_pointing_down(hand_landmarks):
+            if d == "back" and not _is_index_really_pointing_down(hand_landmarks.landmark):
                 d = None
             if d is not None and d not in directions:
                 directions.append(d)
@@ -223,12 +209,13 @@ class GameDetector:
         ordered = sorted(directions, key=lambda x: _DIR_ORDER.index(x))
         return "|".join(ordered), 1.0
 
+    def process(self, frame_bgr) -> tuple[Optional[str], float]:
+        return None, 0.0
+
     @property
     def last_probs(self) -> dict:
         """Game 모드는 LSTM 미사용. UI 호환용 빈 dict."""
         return {}
 
     def close(self) -> None:
-        if self._hands:
-            self._hands.close()
-            self._hands = None
+        pass

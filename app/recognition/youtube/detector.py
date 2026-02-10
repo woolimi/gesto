@@ -20,9 +20,12 @@ class YouTubeDetector:
             cooldown_sec=config.YOUTUBE_COOLDOWN_SEC,
         )
 
-    def process(self, frame_bgr) -> tuple[Optional[str], float]:
+    def process_landmarks(self, multi_hand_landmarks, multi_handedness) -> tuple[Optional[str], float]:
         """한 프레임 처리. Pinch_In / Pinch_Out / Swipe_Left / Swipe_Right 중 하나 또는 (None, 0.0)."""
-        return self._base.process(frame_bgr)
+        return self._base.process_landmarks(multi_hand_landmarks, multi_handedness)
+
+    def process(self, frame_bgr) -> tuple[Optional[str], float]:
+        return None, 0.0
 
     @property
     def cooldown_until(self) -> float:

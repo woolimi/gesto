@@ -48,30 +48,27 @@ def main():
     # UI → Mode Controller
     window.mode_changed.connect(mode_controller.set_mode)
     window.mode_changed.connect(trigger.set_current_mode) # 트리거 워커에 모드 동기화
-    window.mode_changed.connect(play_mode_sound)  # 모드 전환 시 해당 모드 효과음 재생
+    window.mode_changed.connect(play_mode_sound)
     mode_controller.set_mode(window.current_mode)
-    trigger.set_current_mode(window.current_mode) # 초기 모드 설정
-    # 시작/종료 버튼 클릭 → mode_controller 경유 (상태·UI·사운드 일원화)
+    trigger.set_current_mode(window.current_mode)
+    
+    # 시작/종료 버튼 클릭 → mode_controller 경유
     window.toggle_detection_requested.connect(
         lambda: mode_controller.set_detection_state(not mode_controller.get_is_detecting())
     )
 
-    # 트리거 워커 → UI (손 랜드마크가 그려진 웹캠 표시)
-    def on_frame_annotated(qimage):
-        if not qimage.isNull():
-            window.update_webcam_frame(QPixmap.fromImage(qimage))
+    # 카메라 → UI (랜드마크가 그려진 웹캠 표시)
+    camera.frame_updated.connect(lambda qimg: window.update_webcam_frame(QPixmap.fromImage(qimg)))
 
-    trigger.frame_annotated.connect(on_frame_annotated)
-
-    # 카메라 → 공통 트리거 (모션 감지 시작/종료 제스처 확인)
-    camera.frame_bgr_ready.connect(trigger.enqueue_frame)
+    # 카메라 → 공통 트리거 (전달된 랜드마크로 시작/종료 제스처 확인)
+    camera.landmarks_updated.connect(trigger.enqueue_landmarks)
 
     # 카메라 → 모드별 감지 (모션 감지 중일 때만 현재 모드 제스처 인식)
-    def on_frame_bgr(frame_bgr):
+    def on_landmarks_extracted(landmarks, handedness):
         if mode_controller.get_is_detecting():
-            mode_detection.enqueue_frame(frame_bgr)
+            mode_detection.enqueue_landmarks(landmarks, handedness)
 
-    camera.frame_bgr_ready.connect(on_frame_bgr)
+    camera.landmarks_updated.connect(on_landmarks_extracted)
 
     # 트리거 → Mode Controller (모션 감지 시작/정지)
     trigger.trigger_start.connect(lambda: mode_controller.set_detection_state(True))
@@ -88,8 +85,10 @@ def main():
     # Mode Controller → UI (감지 상태 반영)
     mode_controller.detection_state_changed.connect(window.set_detection_state)
 
-    # Mode Controller → TriggerWorker (버튼으로 시작/종료 시 랜드마크 렌더링 상태 동기화)
+    # Mode Controller → TriggerWorker & Camera (랜드마크 렌더링 상태 동기화)
     mode_controller.detection_state_changed.connect(trigger.set_motion_active)
+    mode_controller.detection_state_changed.connect(camera.set_motion_active)
+
     # 감지 시작/정지 시 효과음
     def on_detection_state_changed(is_active: bool):
         if is_active:
@@ -98,18 +97,16 @@ def main():
             play_trigger_stop()
     mode_controller.detection_state_changed.connect(on_detection_state_changed)
 
-    # 모드별 감지 → Mode Controller (제스처 시 pynput 출력) + UI (인식된 제스처 표시)
+    # 모드별 감지 → Mode Controller + UI
     mode_detection.gesture_detected.connect(mode_controller.on_gesture)
     mode_detection.gesture_detected.connect(window.update_gesture)
     
-    # 제스처 인식 성공 시 효과음 (연속 호출 방지 로직 포함)
-    last_played_gesture = [None]  # Closure-based state
+    # 제스처 인식 성공 시 효과음
+    last_played_gesture = [None]
     def on_gesture_detected(gesture, confidence, cooldown_until):
         if not gesture:
             last_played_gesture[0] = None
             return
-            
-        # 새로운 제스처가 감지되었을 때만 효과음 재생 (게임 모드 제외)
         if gesture != last_played_gesture[0]:
             if window.current_mode != "GAME":
                 play_gesture_success()
@@ -118,10 +115,7 @@ def main():
     mode_detection.gesture_detected.connect(on_gesture_detected)
 
     # 카메라 오류
-    def on_camera_error(msg):
-        window.statusBar().showMessage(msg)
-
-    camera.error_occurred.connect(on_camera_error)
+    camera.error_occurred.connect(lambda msg: window.statusBar().showMessage(msg))
 
     start_playback_worker()
     camera.start()

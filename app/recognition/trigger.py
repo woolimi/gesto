@@ -136,20 +136,18 @@ class PostureTriggerDetector:
         self._hold_duration_sec = hold_duration_sec
         self._hold_candidate: TriggerResult | None = None
         self._hold_since: float = 0.0
-        self._mp_hands = mp.solutions.hands
-        self._hands = self._mp_hands.Hands(
-            static_image_mode=False,
-            max_num_hands=2,
-            min_detection_confidence=0.7,
-            min_tracking_confidence=0.7,
-        )
+
+    def process_landmarks(self, landmarks_list, motion_active: bool = False) -> TriggerResult:
+        """외부에서 추출한 landmarks_list(MediaPipe 결과)로 트리거 판별."""
+        out = SimpleNamespace()
+        out.hand_landmarks = [h.landmark for h in (landmarks_list or [])]
+        raw = self._result_to_trigger(out, motion_active)
+        return self._apply_hold_duration(raw)
 
     def _detect(self, frame_bgr):
-        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        results = self._hands.process(rgb)
-        out = SimpleNamespace()
-        out.hand_landmarks = [h.landmark for h in (results.multi_hand_landmarks or [])]
-        return out
+        # Legacy: 더 이상 내부에서 사용하지 않지만 하위 호환을 위해 남겨둘 수 있음.
+        # 실제로는 CameraWorker에서 처리함.
+        return SimpleNamespace(hand_landmarks=[])
 
     def _result_to_trigger(self, result, motion_active: bool) -> TriggerResult:
         if not result.hand_landmarks:

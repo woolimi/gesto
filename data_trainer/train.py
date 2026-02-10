@@ -245,19 +245,25 @@ def save_tflite_model(model, save_path):
             converter = tf.lite.TFLiteConverter.from_saved_model(temp_dir)
             
             # TF Ops 지원 추가 (LSTM 등 복잡한 레이어 호환성 및 LLVM 에러 방지)
+            # Built-in TFLite LSTM이 지원될 수 있도록 가급적 BUILTINS 우선 사용
             converter.target_spec.supported_ops = [
                 tf.lite.OpsSet.TFLITE_BUILTINS, # TFLite 기본 Ops
                 tf.lite.OpsSet.SELECT_TF_OPS    # TF Ops (필요시 사용)
             ]
             
+            # 하드웨어 가속 호환성을 위해 지원되지 않는 경우에만 Flex 사용
+            converter._experimental_lower_tensor_list_ops = True 
+            
             # 양자화 및 변환 시도
             try:
                 converter.optimizations = [tf.lite.Optimize.DEFAULT]
+                # 추론 속도를 위해 데이터형 고정 (FP16 양자화 시도)
+                converter.target_spec.supported_types = [tf.float16]
                 tflite_model = converter.convert()
                 quantized = True
             except Exception as quant_error:
                 print(f"⚠️ 양자화 실패, 기본 변환 시도: {quant_error}")
-                # 컨버터 재설정 (SavedModel 다시 로드 불필요, 옵션만 변경 불가하므로 재생성 권장)
+                # 컨버터 재설정
                 converter = tf.lite.TFLiteConverter.from_saved_model(temp_dir)
                 converter.target_spec.supported_ops = [
                     tf.lite.OpsSet.TFLITE_BUILTINS,

@@ -121,15 +121,6 @@ class LstmGestureBase:
         self._buffer: deque = deque(maxlen=SEQUENCE_LENGTH)
         self._last_probs: dict = {}  # 인식 시 모든 클래스 확률 (UI 표시용)
 
-        # mp.solutions.hands (Legacy) — 학습 데이터 수집(collect_mp)과 동일, 두 손
-        self._mp_hands = mp.solutions.hands
-        self._hands = self._mp_hands.Hands(
-            static_image_mode=False,
-            max_num_hands=2,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-        )
-
         tflite_path = os.path.join(config.MODELS_DIR, "lstm_legacy.tflite")
         if not os.path.isfile(tflite_path):
             raise RuntimeError(
@@ -141,9 +132,23 @@ class LstmGestureBase:
         self._interpreter: Any = InterpreterClass(model_path=tflite_path)
         self._interpreter.allocate_tensors()
         
+        # --- Optimization: Cache TFLite Details ---
+        self._input_details = self._interpreter.get_input_details()
+        self._output_details = self._interpreter.get_output_details()
+        self._input_index = self._input_details[0]["index"]
+        self._output_index = self._output_details[0]["index"]
+        
+        # --- Optimization: Pre-allocated Circular Buffer ---
+        # (SEQUENCE_LENGTH, 462) shaped buffer
+        self._buffer_array = np.zeros((SEQUENCE_LENGTH, LANDMARKS_COUNT * COORDS_COUNT), dtype=np.float32)
+        self._buffer_count = 0
+        
         # Velocity calculation state
         self._prev_right = None
         self._prev_left = None
+        
+        # Pre-allocated feature array to avoid re-allocation
+        self._feature_array = np.zeros((LANDMARKS_COUNT, NUM_CHANNELS), dtype=np.float32)
 
     def _calculate_euclidean_dist(self, p1, p2):
         return np.linalg.norm(p1 - p2)
@@ -227,15 +232,13 @@ class LstmGestureBase:
             "(Ubuntu에서는 pip install tflite-runtime 도 가능)"
         )
 
-    def _get_landmarks_from_frame(self, frame_bgr) -> np.ndarray:
-        """BGR 프레임에서 두 손 랜드마크 (42, 3) 반환. handedness로 순서 고정: Right=0~20, Left=21~41."""
-        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        results = self._hands.process(rgb)
+    def _get_landmarks_from_raw(self, multi_hand_landmarks, multi_handedness) -> np.ndarray:
+        """전달받은 landmarks (list)에서 두 손 랜드마크 (42, 3) 반환. handedness로 순서 고정."""
         zero_hand = np.zeros((21, 3), dtype=np.float32)
         right_slot = zero_hand.copy()
         left_slot = zero_hand.copy()
-        if results.multi_hand_landmarks and results.multi_handedness:
-            for hlm, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
+        if multi_hand_landmarks and multi_handedness:
+            for hlm, handedness in zip(multi_hand_landmarks, multi_handedness):
                 label = handedness.classification[0].label if handedness.classification else ""
                 arr = np.array([[lm.x, lm.y, lm.z] for lm in hlm.landmark], dtype=np.float32)
                 if label == "Right":
@@ -261,59 +264,68 @@ class LstmGestureBase:
         self._prev_right = right_hand.copy()
         self._prev_left = left_hand.copy()
         
-        # Create (42, 11) array
-        new_data = np.zeros((42, NUM_CHANNELS), dtype=np.float32)
-        new_data[:, 0:3] = landmarks
+        # Use pre-allocated (42, 11) array
+        self._feature_array.fill(0)
+        self._feature_array[:, 0:3] = landmarks
         
         # Assign features to all landmarks (broadcasting)
         # Left Hand Features (Channels 3-6)
-        new_data[:, 3] = left_feats[0] # Is_Fist
-        new_data[:, 4] = left_feats[1] # Pinch_Dist
-        new_data[:, 5] = left_feats[2] # Thumb_V
-        new_data[:, 6] = left_feats[3] # Index_Z_V
+        self._feature_array[:, 3] = left_feats[0] # Is_Fist
+        self._feature_array[:, 4] = left_feats[1] # Pinch_Dist
+        self._feature_array[:, 5] = left_feats[2] # Thumb_V
+        self._feature_array[:, 6] = left_feats[3] # Index_Z_V
         
         # Right Hand Features (Channels 7-10)
-        new_data[:, 7] = right_feats[0] # Is_Fist
-        new_data[:, 8] = right_feats[1] # Pinch_Dist
-        new_data[:, 9] = right_feats[2] # Thumb_V
-        new_data[:, 10] = right_feats[3] # Index_Z_V
+        self._feature_array[:, 7] = right_feats[0] # Is_Fist
+        self._feature_array[:, 8] = right_feats[1] # Pinch_Dist
+        self._feature_array[:, 9] = right_feats[2] # Thumb_V
+        self._feature_array[:, 10] = right_feats[3] # Index_Z_V
         
-        return new_data
+        return self._feature_array
+
+    def process_landmarks(self, multi_hand_landmarks, multi_handedness) -> tuple[Optional[str], float]:
+        """외부에서 추출한 landmarks 리스트를 처리하여 추론."""
+        landmarks = self._get_landmarks_from_raw(multi_hand_landmarks, multi_handedness)
+        return self._inference(landmarks)
 
     def process(self, frame_bgr) -> tuple[Optional[str], float]:
-        """
-        한 프레임 처리. 버퍼가 찼을 때만 추론.
-        반환: ("Pinch_In", confidence) | (None, 0.0).
-        """
-        landmarks = self._get_landmarks_from_frame(frame_bgr)
-        if landmarks is None:
-            return None, 0.0
+        # Legacy: 더 이상 내부에서 프레임을 처리하지 않음.
+        return None, 0.0
 
+    def _inference(self, landmarks: np.ndarray) -> tuple[Optional[str], float]:
+        """(42, 3) landmarks를 받아 LSTM 추론 수행."""
         # (42, 3) → (42, 11) Feature Extraction
         data_11ch = self._construct_11_channel_data(landmarks)
 
         # (42, 11) → (1, 42, 11) 정규화 후 (462,)로 버퍼에 추가
-        data = np.expand_dims(data_11ch, axis=0)
-        data = _normalize_landmarks(data)
-        row = data.reshape(-1).astype(np.float32)
-        self._buffer.append(row)
+        # PRE-OPTIMIZATION: data = np.expand_dims(data_11ch, axis=0); data = _normalize_landmarks(data)
+        # OPTIMIZED: Inline normalization to reduce expansions
+        data_11ch = _normalize_landmarks(data_11ch[np.newaxis, ...])[0]
+        row = data_11ch.reshape(-1) # reshape on pre-allocated/just-normalized array is cheap
+        
+        # Circular buffer management
+        if self._buffer_count < SEQUENCE_LENGTH:
+            self._buffer_array[self._buffer_count] = row
+            self._buffer_count += 1
+        else:
+            # Shift left and add at the end (could be optimized further with an actual circular index, 
+            # but for 30 frames, np.roll or slicing is acceptable and simpler)
+            self._buffer_array[:-1] = self._buffer_array[1:]
+            self._buffer_array[-1] = row
 
-        if len(self._buffer) < SEQUENCE_LENGTH:
+        if self._buffer_count < SEQUENCE_LENGTH:
             return None, 0.0
 
-        # (30, 126) → (1, 30, 126) 배치로 추론
-        input_data = np.array(self._buffer, dtype=np.float32)
-        input_data = np.expand_dims(input_data, axis=0)
+        # (30, 462) → (1, 30, 462) 배치로 추론
+        input_data = self._buffer_array[np.newaxis, ...]
 
-        input_details = self._interpreter.get_input_details()
-        output_details = self._interpreter.get_output_details()
-        self._interpreter.set_tensor(input_details[0]["index"], input_data)
+        self._interpreter.set_tensor(self._input_index, input_data)
         self._interpreter.invoke()
-        output = self._interpreter.get_tensor(output_details[0]["index"])  # (1, 4)
+        output = self._interpreter.get_tensor(self._output_index)  # (1, 6)
         probs = output[0]
         pred_idx = int(np.argmax(probs))
         confidence = float(probs[pred_idx])
-        # 매 추론마다 UI용 확률 갱신 (threshold 통과 여부와 무관)
+        
         self._last_probs = {
             self._gesture_classes[i]: float(probs[i])
             for i in range(len(probs))
@@ -333,9 +345,7 @@ class LstmGestureBase:
         return self._gesture_classes[pred_idx], confidence
 
     def close(self) -> None:
-        if self._hands:
-            self._hands.close()
-            self._hands = None
-        self._buffer.clear()
+        self._buffer_count = 0
+        self._buffer_array.fill(0)
         self._prev_right = None
         self._prev_left = None

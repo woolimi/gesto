@@ -21,15 +21,18 @@ class PPTDetector:
             cooldown_sec=config.PPT_COOLDOWN_SEC,
         )
 
-    def process(self, frame_bgr) -> tuple[Optional[str], float]:
+    def process_landmarks(self, multi_hand_landmarks, multi_handedness) -> tuple[Optional[str], float]:
         """LSTM 베이스와 동일하게 (gesture, confidence) 반환. Swipe만 인정."""
-        result = self._base.process(frame_bgr)
+        result = self._base.process_landmarks(multi_hand_landmarks, multi_handedness)
         if isinstance(result, tuple):
             gesture, confidence = result
         else:
             gesture, confidence = result, 0.0
         if gesture in self._SWIPE_ONLY:
             return (gesture, confidence)
+        return (None, 0.0)
+
+    def process(self, frame_bgr) -> tuple[Optional[str], float]:
         return (None, 0.0)
 
     @property
