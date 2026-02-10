@@ -1,7 +1,6 @@
 """
 PPT 모드 전용 감지.
-app/models/의 lstm_legacy(tflite/h5) 사용. Swipe_Left → 이전 슬라이드, Swipe_Right → 다음 슬라이드.
-Pinch_* 제스처는 무시 (Swipe만 사용).
+app/models/의 lstm_legacy(tflite/h5) 사용. Swipe_Left/Right: 이전/다음 슬라이드. Pinch_Out: 발표 시작, Pinch_In: 발표 종료.
 """
 
 from typing import Callable, Optional
@@ -11,9 +10,16 @@ from app.recognition.lstm_gesture_base import LstmGestureBase
 
 
 class PPTDetector:
-    """PPT 모드: 공통 LSTM으로 Swipe만 사용 — 이전/다음 슬라이드."""
+    """PPT 모드: LSTM으로 Swipe + Pinch(전체화면/종료) 사용."""
 
-    _SWIPE_ONLY = ("Swipe_Left", "Swipe_Right")
+    _ALLOWED = (
+        "Swipe_Left",
+        "Swipe_Right",
+        "Pinch_Out_Left",
+        "Pinch_Out_Right",
+        "Pinch_In_Left",
+        "Pinch_In_Right",
+    )
 
     def __init__(self, get_confidence_threshold: Optional[Callable[[], float]] = None):
         self._base = LstmGestureBase(
@@ -22,13 +28,13 @@ class PPTDetector:
         )
 
     def process_landmarks(self, multi_hand_landmarks, multi_handedness) -> tuple[Optional[str], float]:
-        """LSTM 베이스와 동일하게 (gesture, confidence) 반환. Swipe만 인정."""
+        """LSTM 베이스와 동일하게 (gesture, confidence) 반환. Swipe·Pinch 인정."""
         result = self._base.process_landmarks(multi_hand_landmarks, multi_handedness)
         if isinstance(result, tuple):
             gesture, confidence = result
         else:
             gesture, confidence = result, 0.0
-        if gesture in self._SWIPE_ONLY:
+        if gesture in self._ALLOWED:
             return (gesture, confidence)
         return (None, 0.0)
 

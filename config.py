@@ -3,6 +3,7 @@ Gesto 프로젝트 설정 파일
 """
 
 import os
+import sys
 
 # 애플리케이션 정보
 APP_NAME = "Gesto"
@@ -25,7 +26,7 @@ CAMERA_FPS = 30
 GESTURE_DETECTION_FPS = 30
 GESTURE_SEQUENCE_LENGTH = 30  # LSTM 입력 시퀀스 길이
 # True면 UI에 제스처별 확률·threshold 디버그 표시 (기존 UI 유지)
-GESTURE_DEBUG = True
+GESTURE_DEBUG = False
 # 모드별 쿨다운(초). 제스처 인식 후 이 시간 동안 새 제스처 인식 안 함
 PPT_COOLDOWN_SEC = 1.0
 YOUTUBE_COOLDOWN_SEC = 2.0
@@ -109,6 +110,9 @@ GESTURE_DISPLAY_MAP = {
     "대기 중": "동작 감지 해제 ⏸️"
 }
 
+# 구글 슬라이드 발표 시작(전체화면): Mac = cmd+enter, Ubuntu/Linux = ctrl+f5
+PPT_PRESENT_KEYS = "cmd+enter" if sys.platform == "darwin" else "ctrl+f5"
+
 # 제스처 -> 키 입력 매핑 (ModeController 사용)
 # 형식: { "모드": { "제스처명": "키보드키" } }
 # pynput.keyboard.Key 속성명(예: "right", "left", "up", "space") 또는 일반 문자 사용 가능
@@ -116,6 +120,11 @@ GESTURE_ACTION_MAP = {
     "PPT": {
         "Swipe_Left": "right",
         "Swipe_Right": "left",
+        # 구글 슬라이드: Pinch Out = 발표 시작(전체화면), Pinch In = 발표 종료
+        "Pinch_Out_Left": PPT_PRESENT_KEYS,
+        "Pinch_Out_Right": PPT_PRESENT_KEYS,
+        "Pinch_In_Left": "esc",
+        "Pinch_In_Right": "esc",
     },
     "YOUTUBE": {
         "Swipe_Left": "j",

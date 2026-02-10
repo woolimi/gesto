@@ -38,15 +38,26 @@ class ModeController(QObject):
         return mapping
 
     def _resolve_key(self, key_str: str) -> object:
-        """문자열(예: 'right', 'enter', 'a')을 pynput Key 또는 문자로 변환."""
+        """문자열을 pynput Key(또는 문자) 또는 조합키 리스트로 변환. 'ctrl+f5' → [Key.ctrl, Key.f5]."""
+        key_str = key_str.strip()
+        if "+" in key_str:
+            # 조합키: 순서대로 press, 역순 release
+            parts = [p.strip().lower() for p in key_str.split("+") if p.strip()]
+            resolved = []
+            for p in parts:
+                if len(p) == 1:
+                    resolved.append(p)
+                else:
+                    try:
+                        resolved.append(getattr(Key, p))
+                    except AttributeError:
+                        resolved.append(p)
+            return resolved
         if len(key_str) == 1:
             return key_str
-        
-        # pynput.keyboard.Key에 정의된 특수 키 확인
         try:
             return getattr(Key, key_str.lower())
         except AttributeError:
-            # 매칭되는 특수 키가 없으면 문자 그대로 반환
             return key_str
 
     def set_mode(self, mode: ModeName) -> None:
@@ -109,9 +120,14 @@ class ModeController(QObject):
         if keys:
             try:
                 for k in keys:
-                    self._keyboard.press(k)
+                    if isinstance(k, list):
+                        for kk in k:
+                            self._keyboard.press(kk)
+                        for kk in reversed(k):
+                            self._keyboard.release(kk)
+                    else:
+                        self._keyboard.press(k)
+                        self._keyboard.release(k)
                 time.sleep(0.04)
-                for k in keys:
-                    self._keyboard.release(k)
             except Exception:
                 pass
