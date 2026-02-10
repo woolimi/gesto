@@ -1,3 +1,4 @@
+No_Gesture
 Pinch_In_Left
 Pinch_In_Right
 Pinch_Out_Left

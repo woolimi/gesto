@@ -5,6 +5,7 @@ SUPPORTED_GESTURES = [
     "Volume_Up_Left", "Volume_Up_Right",
     "Volume_Down_Left", "Volume_Down_Right",
     "Swipe_Left", "Swipe_Right",
+    "No_Gesture",
 ]
 
 
@@ -33,6 +34,16 @@ class ScenarioManager:
 
         if gesture_name not in self.SUPPORTED_GESTURES:
             self.total_scenarios = 0
+            return
+
+        # No_Gesture는 시나리오 없이 자유롭게 수집 (다양한 정지/대기 포즈)
+        if gesture_name == "No_Gesture":
+            # 간단한 시나리오: 다양한 정지 상태를 수집하도록 안내
+            # 사용자가 자유롭게 다양한 정지 포즈를 녹화하도록 함
+            self.scenarios = [{
+                "display_text": "정지/대기 상태 녹화 (양손 보이지만 움직이지 않음)"
+            }]
+            self.total_scenarios = 1
             return
 
         distances = [70, 140, 200]
@@ -109,6 +120,7 @@ class ScenarioManager:
     def get_filename(self, username=""):
         """
         Generates filename: {action}_{distance}cm_{hand}_{position}_{direction}_{rep}_{username}.npy
+        No_Gesture의 경우: {action}_{timestamp}_{username}.npy
         """
         step = self.get_current_step()
         if step:
@@ -117,6 +129,13 @@ class ScenarioManager:
             if username:
                 clean_user = username.strip().replace(" ", "_").lower()
                 user_suffix = f"_{clean_user}"
+            
+            # No_Gesture는 시나리오 구조가 없으므로 타임스탬프 사용
+            if self.gesture_name == "No_Gesture":
+                import time
+                timestamp = int(time.time() * 1000)
+                return f"{action}_{timestamp}{user_suffix}.npy"
+            
             return f"{action}_{step['distance']}cm_{step['hand'].lower()}_{step['position'].lower()}_{step['direction'].lower()}_{step['rep']:02d}{user_suffix}.npy"
         return "unknown.npy"
 

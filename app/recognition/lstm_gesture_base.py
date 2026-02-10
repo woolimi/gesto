@@ -45,6 +45,7 @@ def _load_gesture_classes(models_dir: str, base_name: str = "lstm_legacy") -> li
         "Play_Pause_Left", "Play_Pause_Right",
         "Volume_Down_Left", "Volume_Down_Right",
         "Volume_Up_Left", "Volume_Up_Right",
+        "No_Gesture",
     ]
 
 
@@ -301,6 +302,11 @@ class LstmGestureBase:
             return None, 0.0
 
         gesture_name = self._gesture_classes[pred_idx]
+        
+        # No_Gesture가 예측되면 None 반환 (액션 실행하지 않음)
+        if gesture_name == "No_Gesture":
+            return None, 0.0
+        
         # LSTM 사용 시: 제스처 손이 아닌 "다른 손"이 반드시 주먹이어야 함.
         # 양손 모두 보일 때만 제스처 인정 (한 손만 보이면 무시).
         row = self._buffer_array[-1]
@@ -344,6 +350,9 @@ class LstmGestureBase:
                     return None, 0.0
 
         self._cooldown_until = now + self._cooldown_sec
+        # 제스처 인식 시 버퍼 초기화 (같은 시퀀스가 쿨다운 후 즉시 재인식되는 것 방지)
+        self._buffer_count = 0
+        self._buffer_array.fill(0)
         return gesture_name, confidence
 
     def close(self) -> None:
