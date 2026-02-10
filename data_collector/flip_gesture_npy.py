@@ -55,11 +55,18 @@ def _flip_sample(arr: np.ndarray) -> np.ndarray:
             return flipped.reshape(t, 63)
         raise ValueError(f"Unsupported 2D shape={a.shape}; expected (T,126) or (T,63).")
 
-    # Landmark shapes: (T, N, 3)
-    if a.shape[-1] != 3:
-        raise ValueError(f"Unsupported last-dim={a.shape[-1]}; expected 3. shape={a.shape}")
+    # Landmark shapes: (T, N, C) where C >= 3.
+    # We insist on at least 3 channels for (x, y, z).
+    if a.shape[-1] < 3:
+        raise ValueError(f"Unsupported last-dim={a.shape[-1]}; expected at least 3. shape={a.shape}")
 
-    t, n, _ = a.shape
+    t, n, c = a.shape
+    
+    # If more than 3 channels (e.g. features), we only process and return the first 3 (x, y, z).
+    # The user requested that output be (30, 42, 3).
+    if c > 3:
+        a = a[:, :, :3]
+
     # Mirror x in normalized image space.
     a[:, :, 0] = 1.0 - a[:, :, 0]
 
@@ -156,10 +163,16 @@ def main() -> int:
         if do_overwrite:
             dst = src
         else:
+            # Determine base filename (replace gesture name if outputting to a different gesture)
+            target_gesture = args.output_gesture if args.output_gesture else args.gesture
+            new_name = src.name.replace(args.gesture, target_gesture)
+            
             if output_changes_folder:
-                dst = out_dir / src.name
+                dst = out_dir / new_name
             else:
-                dst = out_dir / f"{src.stem}{args.suffix}{src.suffix}"
+                stem = Path(new_name).stem
+                suffix = Path(new_name).suffix
+                dst = out_dir / f"{stem}{args.suffix}{suffix}"
 
         print(f"- {src.name} -> {dst.name}  shape={arr.shape}")
         if args.dry_run:

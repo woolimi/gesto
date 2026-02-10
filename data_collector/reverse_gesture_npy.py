@@ -23,10 +23,24 @@ DEFAULT_DATA_DIR = ROOT_DIR / "data_collector" / "data"
 def _reverse_sample(arr: np.ndarray) -> np.ndarray:
     """
     샘플 배열의 시간축(axis 0)을 역순으로 뒤집습니다.
+    (T, N, C) 입력인 경우 C >= 3 이어야 하며, C > 3 이면
+    앞 3채널(x, y, z)만 남기고 나머지는 버립니다.
     """
+    a = arr
+    # Landmark shapes: (T, N, C) typically
+    # Flattened shapes: (T, D) also possible but less common now with 11 channels
+    
+    if a.ndim == 3:
+        if a.shape[-1] < 3:
+             raise ValueError(f"Unsupported last-dim={a.shape[-1]}; expected at least 3. shape={a.shape}")
+        
+        # If more than 3 channels (e.g. features), we only process and return the first 3 (x, y, z).
+        if a.shape[-1] > 3:
+            a = a[:, :, :3]
+            
     # np.flip(arr, axis=0)을 사용하여 첫 번째 차원(T)을 반전시킵니다.
     # copy()를 사용하여 메모리 연속성을 보장합니다.
-    return np.flip(arr, axis=0).copy()
+    return np.flip(a, axis=0).copy()
 
 
 def _resolve_paths(
@@ -110,10 +124,16 @@ def main() -> int:
         if do_overwrite:
             dst = src
         else:
+            # Determine base filename (replace gesture name if outputting to a different gesture)
+            target_gesture = args.output_gesture if args.output_gesture else args.gesture
+            new_name = src.name.replace(args.gesture, target_gesture)
+            
             if output_changes_folder:
-                dst = out_dir / src.name
+                dst = out_dir / new_name
             else:
-                dst = out_dir / f"{src.stem}{args.suffix}{src.suffix}"
+                stem = Path(new_name).stem
+                suffix = Path(new_name).suffix
+                dst = out_dir / f"{stem}{args.suffix}{suffix}"
 
         print(f"- {src.name} -> {dst.name}  shape={arr.shape}")
         if args.dry_run:
