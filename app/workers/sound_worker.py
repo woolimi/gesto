@@ -203,7 +203,7 @@ class SoundPlaybackWorker(QThread):
             if item is None:
                 break
             path, volume = item
-            _play_mp3(path, volume)
+            _play_subprocess(path, volume)
 
     def stop(self) -> None:
         self._running = False
