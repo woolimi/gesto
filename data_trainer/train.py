@@ -15,8 +15,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # 경로 설정 (data_collector/data 아래 Gesture, Posture 폴더에서 로드)
-# 경로 설정 (data_collector/data/converted_gesture 아래 Gesture, Posture 폴더에서 로드)
-DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data_collector', 'data', 'converted_gesture'))
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data_collector', 'data'))
 MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'models'))
 # 앱이 로드하는 모델 경로 (학습 후 여기로 복사)
 APP_MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'app', 'models'))
