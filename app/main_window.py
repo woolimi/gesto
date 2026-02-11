@@ -10,8 +10,8 @@ from PyQt6.QtWidgets import (
     QDialog, QComboBox, QFormLayout, QApplication, QSlider,
     QGraphicsOpacityEffect, QMenu, QGridLayout
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF, QEvent, QSize, QTimer
-from PyQt6.QtGui import QColor, QFont, QFontDatabase, QPixmap, QAction, QIcon
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF, QEvent, QSize, QTimer, QPropertyAnimation, pyqtProperty
+from PyQt6.QtGui import QColor, QFont, QFontDatabase, QPixmap, QAction, QIcon, QTransform, QPainter, QLinearGradient, QBrush, QPen
 
 import config
 from app.widgets import LogoWidget, WebcamPanelWidget, ControlPanelWidget
@@ -85,15 +85,13 @@ class SettingsDialog(QDialog):
         form_layout = QFormLayout()
         form_layout.setSpacing(15)
         
-        self.combo_res = QComboBox()
-        self.combo_res.addItems(["1280x720 (기본)", "1920x1080", "800x600"])
-        form_layout.addRow("창 크기:", self.combo_res)
-        
         self.combo_cam = QComboBox()
-        self.combo_cam.addItems(["기본 카메라 (0)", "외부 카메라 (1)"])
+        self._detect_cameras()
         form_layout.addRow("카메라 소스:", self.combo_cam)
         
         layout.addLayout(form_layout)
+        
+        self.combo_cam.currentIndexChanged.connect(self._on_cam_changed)
         
         res_label = QLabel("해상도 강제 설정:")
         res_label.setStyleSheet(f"color: #00FFFF; font-weight: bold; margin-top: 10px; font-family: '{config.FONT_MAIN}', sans-serif;")
@@ -181,6 +179,45 @@ class SettingsDialog(QDialog):
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
 
+    def _detect_cameras(self):
+        import cv2
+        available_cameras = []
+        current_active = config.CAMERA_INDEX
+        
+        # Scan more indices and be more permissive
+        for i in range(5):
+            if i == current_active:
+                available_cameras.append(i)
+                continue
+                
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                if ret:
+                    available_cameras.append(i)
+                cap.release()
+        
+        if not available_cameras:
+            available_cameras = [current_active]
+
+        self.combo_cam.clear()
+        for idx in available_cameras:
+            name = f"기본 카메라 ({idx})" if idx == 0 else f"외부 카메라 ({idx})"
+            self.combo_cam.addItem(name, idx)
+            
+        # Set current selection
+        for i in range(self.combo_cam.count()):
+            if self.combo_cam.itemData(i) == current_active:
+                self.combo_cam.setCurrentIndex(i)
+                break
+
+    def _on_cam_changed(self, index):
+        cam_idx = self.combo_cam.itemData(index)
+        if cam_idx is not None:
+            parent = self.parent()
+            if parent:
+                parent.camera_source_changed.emit(cam_idx)
+
     def _set_resolution(self, w, h):
         parent = self.parent()
         if parent:
@@ -194,6 +231,119 @@ class SettingsDialog(QDialog):
                 h = min(h, avail.height())
             parent.resize(w, h)
             self.accept()
+
+class RotatingSettingsButton(QPushButton):
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self._angle = 0
+        self.animation = QPropertyAnimation(self, b"angle")
+        self.animation.setDuration(2000)
+        self.animation.setStartValue(0)
+        self.animation.setEndValue(360)
+        self.animation.setLoopCount(-1) # Infinite loop
+
+    @pyqtProperty(int)
+    def angle(self):
+        return self._angle
+
+    @angle.setter
+    def angle(self, val):
+        self._angle = val
+        self.update()
+
+    def start_rotation(self):
+        if self.animation.state() != QPropertyAnimation.State.Running:
+            self.animation.start()
+
+    def stop_rotation(self):
+        self.animation.stop()
+        self._angle = 0
+        self.update()
+
+    def paintEvent(self, event):
+        from PyQt6.QtWidgets import QStyle, QStyleOptionButton
+        
+        # 1. Draw background and other style elements (hover, etc.)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        opt = QStyleOptionButton()
+        self.initStyleOption(opt)
+        # Clear text so background draws without the gear
+        opt.text = "" 
+        self.style().drawControl(QStyle.ControlElement.CE_PushButton, opt, painter, self)
+
+        # 2. Draw rotated gear icon
+        center = self.rect().center()
+        
+        # Rotate the painter for the gear ONLY
+        painter.save()
+        transform = QTransform()
+        transform.translate(center.x(), center.y())
+        transform.rotate(self._angle)
+        transform.translate(-center.x(), -center.y())
+        painter.setTransform(transform)
+        
+        # Use the button's current text color (handles hover state if stylesheet is set)
+        # However, for manual drawing, we can check hover state
+        color = QColor(config.COLOR_PRIMARY)
+        if self.underMouse():
+            color = QColor("white")
+            
+        painter.setPen(color)
+        font = self.font()
+        font.setPixelSize(22)
+        painter.setFont(font)
+        
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "⚙")
+        painter.restore()
+        painter.end()
+
+class ShimmerLabel(QLabel):
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self._shimmer_pos = -1.0
+        self.animation = QPropertyAnimation(self, b"shimmer_pos")
+        self.animation.setDuration(3000)
+        self.animation.setStartValue(-1.0)
+        self.animation.setEndValue(2.0)
+        self.animation.setLoopCount(-1)
+        self.animation.start()
+
+    @pyqtProperty(float)
+    def shimmer_pos(self):
+        return self._shimmer_pos
+
+    @shimmer_pos.setter
+    def shimmer_pos(self, val):
+        self._shimmer_pos = val
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # 1. Base Text (Dimmer)
+        rect = self.rect()
+        font = self.font()
+        painter.setFont(font)
+        
+        # 2. Setup Shimmer Gradient
+        gradient = QLinearGradient(
+            rect.left() + rect.width() * self._shimmer_pos, 0,
+            rect.left() + rect.width() * (self._shimmer_pos + 0.4), 0
+        )
+        
+        main_color = QColor(config.COLOR_PRIMARY)
+        highlight = QColor("white")
+        
+        gradient.setColorAt(0, main_color)
+        gradient.setColorAt(0.5, highlight)
+        gradient.setColorAt(1, main_color)
+        
+        painter.setPen(QPen(QBrush(gradient), 0))
+        painter.drawText(rect, self.alignment(), self.text())
+        painter.end()
 
 class CustomTopBar(QWidget):
     settings_clicked = pyqtSignal()
@@ -217,7 +367,7 @@ class CustomTopBar(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(20, 0, 20, 0)
         
-        self.title_label = QLabel("GESTO")
+        self.title_label = ShimmerLabel("GESTO")
         self.title_label.setStyleSheet(f"color: {config.COLOR_PRIMARY}; font-size: 24px; font-weight: bold; font-family: '{config.FONT_MAIN}'; letter-spacing: 6px; background: transparent;")
         layout.addWidget(self.title_label)
         
@@ -249,15 +399,29 @@ class CustomTopBar(QWidget):
         
         self.status_dot = QLabel("●")
         self.status_dot.setStyleSheet("color: #00FF00; font-size: 10px; background: transparent;")
+        
         self.status_text = QLabel("상태: 준비됨")
-        self.status_text.setStyleSheet(f"color: #00FFFF; font-size: 13px; margin-left: 5px; font-family: '{config.FONT_MAIN}'; letter-spacing: 2px; font-weight: bold; background: transparent;")
+        # Nudging text down slightly (padding-top) to align its center with the circle's center
+        self.status_text.setStyleSheet(f"""
+            color: #00FFFF; 
+            font-size: 13px; 
+            margin-left: 5px; 
+            font-family: '{config.FONT_MAIN}'; 
+            letter-spacing: 2px; 
+            font-weight: bold; 
+            background: transparent;
+            padding-top: 3.5px;
+        """)
         
         status_container = QWidget()
         status_layout = QHBoxLayout(status_container)
-        status_layout.setContentsMargins(8, 4, 12, 4)
+        status_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        status_layout.setContentsMargins(8, 0, 12, 0)
+        status_layout.setSpacing(4)
+        
         status_layout.addWidget(self.status_dot)
         status_layout.addWidget(self.status_text)
-        # Transparent background and no border for a cleaner look
+        
         status_container.setStyleSheet("background-color: transparent; border: none;")
         layout.addWidget(status_container)
         
@@ -277,7 +441,7 @@ class CustomTopBar(QWidget):
         controls_layout = QHBoxLayout()
         controls_layout.setSpacing(10)
         
-        self.btn_settings = QPushButton("⚙")
+        self.btn_settings = RotatingSettingsButton("⚙")
         self.btn_settings.setFixedSize(30, 30)
         self.btn_settings.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.style_nav_btn(self.btn_settings, color="#00FFFF")
@@ -365,6 +529,7 @@ class MainWindow(QMainWindow):
     sensitivity_changed = pyqtSignal(int)
     mode_changed = pyqtSignal(str)
     toggle_detection_requested = pyqtSignal()
+    camera_source_changed = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -497,7 +662,15 @@ class MainWindow(QMainWindow):
         play_ui_click()
         if not hasattr(self, "_settings_dialog") or self._settings_dialog is None:
             self._settings_dialog = SettingsDialog(self)
+        
+        # Start gear animation
+        self.top_bar.btn_settings.start_rotation()
+        
         self._center_settings_dialog()
+        
+        # Stop animation when dialog closes
+        self._settings_dialog.finished.connect(lambda: self.top_bar.btn_settings.stop_rotation())
+        
         self._settings_dialog.show()
 
     def _center_settings_dialog(self):

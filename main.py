@@ -119,6 +119,19 @@ def main():
     # 카메라 오류
     camera.error_occurred.connect(lambda msg: window.statusBar().showMessage(msg))
 
+    # 카메라 소스 변경 핸들러
+    def on_camera_source_changed(new_index):
+        if config.CAMERA_INDEX == new_index:
+            return
+            
+        print(f"Switching camera to index: {new_index}")
+        camera.stop()
+        camera.wait(2000) # Wait for thread to finish
+        config.CAMERA_INDEX = new_index
+        camera.start()
+        
+    window.camera_source_changed.connect(on_camera_source_changed)
+
     start_playback_worker()
     camera.start()
     trigger.start()

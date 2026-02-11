@@ -3,11 +3,83 @@ from PyQt6.QtWidgets import (
     QSlider, QFrame, QGraphicsDropShadowEffect, QSizePolicy,
     QMenu, QWidgetAction
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer, QPoint
-from PyQt6.QtGui import QColor, QFont, QAction
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer, QPoint, QPropertyAnimation, pyqtProperty
+from PyQt6.QtGui import QColor, QFont, QAction, QPainter, QPen
 
 import config
 from app.workers.sound_worker import play_ui_click
+
+class MorphingHamburgerIcon(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._morph_progress = 0.0 # 0.0 = Hamburger, 1.0 = X
+        self.animation = QPropertyAnimation(self, b"morph_progress")
+        self.animation.setDuration(300)
+        self.setFixedSize(30, 30)
+
+    @pyqtProperty(float)
+    def morph_progress(self):
+        return self._morph_progress
+
+    @morph_progress.setter
+    def morph_progress(self, val):
+        self._morph_progress = val
+        self.update()
+
+    def morph_to_x(self):
+        self.animation.stop()
+        self.animation.setStartValue(self._morph_progress)
+        self.animation.setEndValue(1.0)
+        self.animation.start()
+
+    def morph_to_hamburger(self):
+        self.animation.stop()
+        self.animation.setStartValue(self._morph_progress)
+        self.animation.setEndValue(0.0)
+        self.animation.start()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        pen = QPen(QColor(config.COLOR_PRIMARY))
+        pen.setWidth(3)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        
+        w = self.width()
+        h = self.height()
+        p = self._morph_progress
+        
+        # Line 1 (Top) -> Cross Line 1
+        # Hamburger: (5, 7) -> (25, 7)
+        # X: (7, 7) -> (23, 23)
+        y_top = 7 + (8 * p) # center is h/2 = 15
+        painter.drawLine(
+            int(5 + 2*p), int(7 + 0*p), 
+            int(25 - 2*p), int(7 + 16*p)
+        )
+        
+        # Line 2 (Middle) -> Fades out
+        # In this simple logic, drawing 3 lines is hard to morph perfectly.
+        # Let's use a cleaner approach for middle line: fade opacity
+        middle_alpha = 255 * (1.0 - p)
+        if middle_alpha > 0:
+            mid_pen = QPen(QColor(0, 255, 255, int(middle_alpha)))
+            mid_pen.setWidth(3)
+            mid_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(mid_pen)
+            painter.drawLine(5, 15, 25, 15)
+        
+        # Line 3 (Bottom) -> Cross Line 2
+        # Hamburger: (5, 23) -> (25, 23)
+        # X: (7, 23) -> (23, 7)
+        painter.setPen(pen)
+        painter.drawLine(
+            int(5 + 2*p), int(23 - 0*p),
+            int(25 - 2*p), int(23 - 16*p)
+        )
+        painter.end()
 
 class CenteredMenuAction(QWidgetAction):
     """QMenu 내에서 명시적으로 중앙 정렬된 텍스트를 구현하기 위한 커스텀 액션"""
@@ -28,7 +100,7 @@ class CenteredMenuAction(QWidgetAction):
         self.label.setStyleSheet(f"""
             color: white;
             font-family: '{config.FONT_MAIN}';
-            font-size: 14px;
+            font-size: 20px;
             font-weight: 800;
             background: transparent;
             border: none;
@@ -197,7 +269,7 @@ class ControlPanelWidget(QWidget):
         """실시간 크기 조절 대응"""
         self.current_scale = scale
         is_micro = scale < 0.6
-        base_font_size = max(10, int(15 * scale))
+        base_font_size = max(20, int(15 * scale))
         
         font = QFont(config.FONT_MAIN)
         font.setPixelSize(base_font_size)
@@ -205,12 +277,21 @@ class ControlPanelWidget(QWidget):
         # 폰트 굵기 명시적 강화 (GIANTS 브랜드 특성 반영)
         font.setWeight(QFont.Weight.ExtraBold)
         
-        self.mode_btn.setFont(font)
         self.toggle_button.setFont(font)
+        self.mode_label.setFont(font)
         
-        btn_h = max(35, int(65 * scale))
-        self.mode_btn.setFixedHeight(btn_h)
+        icon_font = QFont(config.FONT_MAIN)
+        icon_font.setPixelSize(max(20, int(30 * scale)))
+        self.mode_icon.setFont(icon_font)
+        
+        # Spacer width scaling for centering
+        spacer_w = max(20, int(40 * scale))
+        self.mode_icon.setFixedWidth(spacer_w)
+        self.mode_right_spacer.setFixedWidth(spacer_w)
+        
+        btn_h = max(40, int(65 * scale))
         self.toggle_button.setFixedHeight(btn_h)
+        self.mode_btn.setFixedHeight(btn_h)
         
         min_w = 40 if is_micro else 250
         self.mode_btn.setMinimumWidth(min_w)
@@ -243,15 +324,40 @@ class ControlPanelWidget(QWidget):
             }}
         """)
 
-        # 1. 모드 선택 버튼 + 메뉴
-        self.mode_btn = QPushButton("게임 모드 🎮")
+        # 1. 모드 선택 버튼 (Box Style: Label Left + Icon Right)
+        self.mode_btn = QPushButton()
         self.mode_btn.setFixedHeight(65)
         self.mode_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         
+        # 내부 레이아웃으로 [☰] [Stretch] [텍스트] [Stretch] [Placeholder] 순서로 배치
+        btn_layout = QHBoxLayout(self.mode_btn)
+        btn_layout.setContentsMargins(20, 0, 20, 0)
+        
+        self.mode_icon = MorphingHamburgerIcon()
+        self.mode_icon.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.mode_icon.setFixedWidth(40) # Base width for centering math
+        
+        self.mode_label = QLabel("게임 모드 🎮")
+        self.mode_label.setStyleSheet("color: white; background: transparent; border: none;")
+        self.mode_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.mode_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Placeholder on the right to balance the icon on the left
+        self.mode_right_spacer = QWidget()
+        self.mode_right_spacer.setFixedWidth(40)
+        
+        btn_layout.addWidget(self.mode_icon)
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.mode_label)
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.mode_right_spacer)
+        
         # Create Menu
         self.mode_menu = QMenu(self)
         self.mode_menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.mode_menu.aboutToShow.connect(self.mode_icon.morph_to_x)
+        self.mode_menu.aboutToHide.connect(self.mode_icon.morph_to_hamburger)
         
         modes = [
             ("PPT 모드 📑", "PPT"),
@@ -264,23 +370,18 @@ class ControlPanelWidget(QWidget):
             action.triggered.connect(lambda checked=False, l=label, c=code: self._on_mode_select(l, c))
             self.mode_menu.addAction(action)
             
-        # Instead of setMenu (which anchors to left), we manually show it centered
         self.mode_btn.clicked.connect(self._show_mode_menu)
         
         self.mode_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(255, 255, 255, 15);
-                color: white;
-                border: 1px solid rgba(0, 255, 255, 50);
-                border-radius: 8px;
-                padding: 1px 15px;
-                text-align: center;
+                background-color: rgba(255, 255, 255, 10);
+                border: 1px solid rgba(0, 255, 255, 40);
+                border-radius: 12px;
             }
             QPushButton:hover {
-                background-color: rgba(0, 255, 255, 30);
+                background-color: rgba(0, 255, 255, 20);
                 border: 2px solid #00FFFF;
             }
-            QPushButton::menu-indicator { image: none; }
         """)
         
         self.mode_menu.setStyleSheet("""
@@ -310,13 +411,16 @@ class ControlPanelWidget(QWidget):
         self.toggle_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.toggle_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         
-        self._update_toggle_style(False) 
         self.toggle_button.clicked.connect(self.toggle_clicked.emit)
-        layout.addWidget(self.toggle_button)
+        
+        # Order: [Mode Button (Unified)] [Toggle Button]
+        layout.setSpacing(15)
+        layout.addWidget(self.mode_btn, 1)
+        layout.addWidget(self.toggle_button, 1)
 
     def _on_mode_select(self, label, code):
         play_ui_click()
-        self.mode_btn.setText(label)
+        self.mode_label.setText(label)
         self.mode_changed.emit(code)
 
     def _show_mode_menu(self):
@@ -372,7 +476,7 @@ class ControlPanelWidget(QWidget):
             "GAME": "게임 모드 🎮"
         }
         label = mode_labels.get(mode, "게임 모드 🎮")
-        self.mode_btn.setText(label)
+        self.mode_label.setText(label)
 
     def set_sensitivity_label(self, value: int):
         self.sensitivity_value = value
