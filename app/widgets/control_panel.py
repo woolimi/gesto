@@ -364,6 +364,16 @@ class ControlPanelWidget(QWidget):
             self.toggle_button.setText("동작 감지 시작")
             self._update_toggle_style(False)
 
+    def set_mode(self, mode: str):
+        """외부에서 모드를 강제로 주입 (UI 동기화용, 시그널 미발생)"""
+        mode_labels = {
+            "PPT": "PPT 모드 📑",
+            "YOUTUBE": "Youtube/Media 📺",
+            "GAME": "게임 모드 🎮"
+        }
+        label = mode_labels.get(mode, "게임 모드 🎮")
+        self.mode_btn.setText(label)
+
     def set_sensitivity_label(self, value: int):
         self.sensitivity_value = value
 

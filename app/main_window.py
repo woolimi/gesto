@@ -368,7 +368,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.current_mode = "GAME"
+        self.current_mode = "PPT"
         self.sensitivity = config.SENSITIVITY_DEFAULT
         self.is_detecting = False
         
@@ -903,6 +903,15 @@ class MainWindow(QMainWindow):
         self.current_mode = mode
         self.mode_changed.emit(mode)
         
+        # Sync Control Panel Label
+        if hasattr(self, 'control_panel'):
+            self.control_panel.set_mode(mode)
+        
+        # External Browser for Game
+        if mode == "GAME":
+            import webbrowser
+            webbrowser.open(config.GAME_URL)
+
         # Sync TriggerWorker mode
         if hasattr(self, 'trigger_worker'):
             self.trigger_worker.set_current_mode(mode)

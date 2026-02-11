@@ -37,7 +37,7 @@ def main():
         QFontDatabase.addApplicationFont(font_path)
 
     window = MainWindow()
-    mode_controller = ModeController(initial_mode="GAME")
+    mode_controller = ModeController(initial_mode="PPT")
     camera = CameraWorker()
     trigger = TriggerWorker()
     mode_detection = ModeDetectionWorker(

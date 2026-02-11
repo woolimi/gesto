@@ -28,18 +28,24 @@ class ModeController(QObject):
         # Game 모드: 현재 눌려 있다고 보는 키. 방향 전환 시 이전 키를 먼저 놓기 위함.
         self._last_game_keys: set = set()
 
-    def _build_gesture_mapping(self) -> dict[tuple[str, str], object]:
-        """config.GESTURE_ACTION_MAP에서 매핑을 로드하고 문자열 키를 pynput Key 객체로 변환."""
+    def _build_gesture_mapping(self) -> dict[tuple[str, str], list]:
+        """config.GESTURE_ACTION_MAP에서 매핑을 로드. ','로 구분된 시퀀스 지원."""
         mapping = {}
         for mode, gestures in config.GESTURE_ACTION_MAP.items():
-            for g_name, key_str in gestures.items():
-                resolved_key = self._resolve_key(key_str)
-                mapping[(mode, g_name)] = resolved_key
+            for g_name, action_str in gestures.items():
+                # 시퀀스(,) 분리
+                steps = []
+                for step_str in action_str.split(","):
+                    steps.append(self._resolve_key(step_str))
+                mapping[(mode, g_name)] = steps
         return mapping
 
     def _resolve_key(self, key_str: str) -> object:
         """문자열을 pynput Key(또는 문자) 또는 조합키 리스트로 변환. 'ctrl+f5' → [Key.ctrl, Key.f5]."""
         key_str = key_str.strip()
+        if not key_str:
+            return None
+            
         if "+" in key_str:
             # 조합키: 순서대로 press, 역순 release
             parts = [p.strip().lower() for p in key_str.split("+") if p.strip()]
@@ -98,36 +104,49 @@ class ModeController(QObject):
         if not raw or raw.lower() == "unknown":
             return
         names = [s.strip() for s in raw.split("|") if s.strip()]
-        keys = []
+        
+        # 1. Collect all actions for active gestures
+        all_actions = []
         for name in names:
-            key = self._gesture_to_key.get((self._mode, name))
-            if key is not None:
-                keys.append(key)
+            actions = self._gesture_to_key.get((self._mode, name))
+            if actions:
+                all_actions.extend(actions)
 
+        if not all_actions:
+            return
+
+        # 2. GAME Mode Logic (Continuous press)
         if self._mode == "GAME":
-            keys_set = set(keys)
+            keys_set = set(all_actions)
             if keys_set != self._last_game_keys:
                 self._release_game_keys()
                 if keys_set:
                     try:
                         for k in keys_set:
-                            self._keyboard.press(k)
+                            if k: self._keyboard.press(k)
                         self._last_game_keys = keys_set
                     except Exception:
                         pass
             return
 
-        if keys:
-            try:
-                for k in keys:
-                    if isinstance(k, list):
-                        for kk in k:
-                            self._keyboard.press(kk)
-                        for kk in reversed(k):
-                            self._keyboard.release(kk)
-                    else:
+        # 3. PPT/YOUTUBE Logic (Sequential tap or combination)
+        try:
+            for action in all_actions:
+                if not action:
+                    continue
+                
+                if isinstance(action, list):
+                    # Combination (e.g. ctrl+f5)
+                    for k in action:
                         self._keyboard.press(k)
+                    for k in reversed(action):
                         self._keyboard.release(k)
-                time.sleep(0.04)
-            except Exception:
-                pass
+                else:
+                    # Single Key Tap
+                    self._keyboard.press(action)
+                    self._keyboard.release(action)
+                
+                # Small delay between sequence steps (f5 -> wait -> k)
+                time.sleep(0.08) 
+        except Exception:
+            pass

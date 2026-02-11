@@ -19,6 +19,8 @@ class PPTDetector:
         "Pinch_Out_Right",
         "Pinch_In_Left",
         "Pinch_In_Right",
+        "Play_Pause_Left",
+        "Play_Pause_Right"
     )
 
     def __init__(self, get_confidence_threshold: Optional[Callable[[], float]] = None):

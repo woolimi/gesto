@@ -16,6 +16,9 @@ ASSETS_DIR = os.path.join(_ROOT, "app", "assets")
 MODELS_DIR = os.path.join(_ROOT, "app", "models")
 DATA_DIR = os.path.join(_ROOT, "app", "data")
 
+# 웹 게임 설정
+GAME_URL = "https://ratlabyrinth.netlify.app/"
+
 # 웹캠 설정
 CAMERA_INDEX = 0
 CAMERA_WIDTH = 640
@@ -112,19 +115,25 @@ GESTURE_DISPLAY_MAP = {
 
 # 구글 슬라이드 발표 시작(전체화면): Mac = cmd+enter, Ubuntu/Linux = ctrl+f5
 PPT_PRESENT_KEYS = "cmd+enter" if sys.platform == "darwin" else "ctrl+f5"
+PPT_PLAY_PAUSE_KEY = "k"
 
 # 제스처 -> 키 입력 매핑 (ModeController 사용)
 # 형식: { "모드": { "제스처명": "키보드키" } }
 # pynput.keyboard.Key 속성명(예: "right", "left", "up", "space") 또는 일반 문자 사용 가능
+# ','를 사용하여 여러 키를 순차적으로 입력 가능 (예: "ctrl+f5, k")
 GESTURE_ACTION_MAP = {
     "PPT": {
         "Swipe_Left": "right",
         "Swipe_Right": "left",
-        # 구글 슬라이드: Pinch Out = 발표 시작(전체화면), Pinch In = 발표 종료
+        # 구글 슬라이드: Pinch Out = 발표 시작, Pinch In = 발표 종료
         "Pinch_Out_Left": PPT_PRESENT_KEYS,
         "Pinch_Out_Right": PPT_PRESENT_KEYS,
         "Pinch_In_Left": "esc",
         "Pinch_In_Right": "esc",
+
+        # 재생/일시정지 제스처 추가 (전용 제스처 사용)
+        "Play_Pause_Left": PPT_PLAY_PAUSE_KEY,
+        "Play_Pause_Right": PPT_PLAY_PAUSE_KEY,
     },
     "YOUTUBE": {
         "Swipe_Left": "j",
