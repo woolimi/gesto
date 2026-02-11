@@ -23,8 +23,8 @@ class TriggerResult(str, Enum):
     NONE = "none"
     START = "start"   # 양손 펴기 + 손바닥 정면 + 위 방향
     STOP = "stop"     # 양손 주먹 + 손바닥 정면 + 위 방향
-    ALWAYS_ON_TOP_ON = "aot_on"   # 한 손 검지 위로
-    ALWAYS_ON_TOP_OFF = "aot_off" # 한 손 검지 아래로
+    ALWAYS_ON_TOP_ON = "aot_on"   # 한 손 브이 제스처 위로
+    ALWAYS_ON_TOP_OFF = "aot_off" # 한 손 브이 제스처 아래로
 
 # 랜드마크 인덱스 정의
 WRIST = 0
@@ -76,18 +76,45 @@ def _get_hand_state(landmarks):
             pip_above_tip = all(landmarks[pip].y < landmarks[tip].y for pip, tip in zip(pips, fingers_tip))
             if pip_above_tip:
                 return "FIST"
-    
-    # 검지 손가락 위/아래 제스처 판별 (Always on Top용)
-    # 1. 검지 손가락 확장 여부 확인
-    index_extended = landmarks[INDEX_TIP].y < landmarks[INDEX_PIP].y < landmarks[INDEX_MCP].y
-    index_pointing_down = landmarks[INDEX_TIP].y > landmarks[INDEX_PIP].y > landmarks[INDEX_MCP].y
-    
-    # 2. 나머지 손가락 접힘 여부 확인
-    others_folded = all(landmarks[tip].y > landmarks[mcp].y for tip, mcp in zip([MIDDLE_TIP, RING_TIP, PINKY_TIP], [MIDDLE_MCP, RING_MCP, PINKY_MCP]))
 
-    if others_folded:
-        if index_extended: return "INDEX_UP"
-        if index_pointing_down: return "INDEX_DOWN"
+    # 브이 제스처 판별 (Always on Top용)
+    # 1. 검지와 중지의 평균 위치로 브이 방향 먼저 판단
+    v_tip_y = (landmarks[INDEX_TIP].y + landmarks[MIDDLE_TIP].y) / 2
+    wrist_y = landmarks[WRIST].y
+    is_pointing_up = v_tip_y < wrist_y
+
+    # 1. 나머지 손가락(약지, 새끼손가락)이 접혀 있는지 확인
+    others_folded = (
+        landmarks[RING_TIP].y > landmarks[RING_MCP].y and
+        landmarks[PINKY_TIP].y > landmarks[PINKY_MCP].y
+    ) if is_pointing_up else (
+        landmarks[RING_TIP].y < landmarks[RING_MCP].y and
+        landmarks[PINKY_TIP].y < landmarks[PINKY_MCP].y
+    )
+    
+    if not others_folded:
+        return "IGNORE"
+    
+    
+    # 3. 방향에 따라 검지와 중지가 펴져 있는지 확인
+    if is_pointing_up:
+        # 위로 향할 때: TIP이 MCP보다 위에 있어야 함
+        index_extended = landmarks[INDEX_TIP].y < landmarks[INDEX_PIP].y < landmarks[INDEX_MCP].y
+        middle_extended = landmarks[MIDDLE_TIP].y < landmarks[MIDDLE_PIP].y < landmarks[MIDDLE_MCP].y
+    else:
+        # 아래로 향할 때: TIP이 MCP보다 아래에 있어야 함 (y값 비교 반대)
+        index_extended = landmarks[INDEX_TIP].y > landmarks[INDEX_PIP].y > landmarks[INDEX_MCP].y
+        middle_extended = landmarks[MIDDLE_TIP].y > landmarks[MIDDLE_PIP].y > landmarks[MIDDLE_MCP].y
+    
+    # 4. 엄지가 손목보다 카메라에 가까운지 확인 (z 값이 작을수록 카메라에 가까움)
+    thumb_closer_than_wrist = landmarks[THUMB_TIP].z < landmarks[WRIST].z
+    
+    # 5. 브이 제스처 확인
+    if index_extended and middle_extended and thumb_closer_than_wrist:
+        if is_pointing_up:
+            return "V_UP"
+        else:
+            return "V_DOWN"
 
     return "IGNORE"
 
@@ -156,11 +183,12 @@ class PostureTriggerDetector:
         hands = result.hand_landmarks
         hand_states = [_get_hand_state(h) for h in hands]
         
-        # Always on Top: ONE hand is enough
-        if "INDEX_UP" in hand_states:
-            return TriggerResult.ALWAYS_ON_TOP_ON
-        if "INDEX_DOWN" in hand_states:
-            return TriggerResult.ALWAYS_ON_TOP_OFF
+        # Always on Top: 한 손만 감지될 때만 동작
+        if len(hands) == 1:
+            if "V_UP" in hand_states:
+                return TriggerResult.ALWAYS_ON_TOP_ON
+            if "V_DOWN" in hand_states:
+                return TriggerResult.ALWAYS_ON_TOP_OFF
 
         # START/STOP: Requires TWO hands
         if len(hands) < 2:
@@ -181,7 +209,7 @@ class PostureTriggerDetector:
         return TriggerResult.NONE
 
     def _apply_hold_duration(self, raw: TriggerResult) -> TriggerResult:
-        """동일 포즈가 hold_duration_sec 이상 유지될 때만 START/STOP 반환."""
+        """동일 포즈가 hold_duration_sec 이상 유지될 때만 트리거 반환 (START/STOP/ALWAYS_ON_TOP_ON/ALWAYS_ON_TOP_OFF)."""
         if raw == TriggerResult.NONE:
             self._hold_candidate = None
             self._hold_since = 0.0
