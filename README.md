@@ -2,7 +2,8 @@
   <img src="app/assets/gesto-light.png" alt="Gesto Logo" width="200"/>
 </div>
 
-# Gesto: Deep Learning-based Hand Gesture Recognition & PC Control System
+# Gesto
+# Deep Learning-based Hand Gesture Recognition & PC Control System
 
 ## 1. Overview
 
