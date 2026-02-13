@@ -29,12 +29,17 @@ def main():
     app.setApplicationName(config.APP_NAME)
     app.setApplicationVersion(config.APP_VERSION)
 
-    # Global Font Registration
+    # Global Font Registration (macOS: use actual family name returned by Qt)
     from PyQt6.QtGui import QFontDatabase
     import os
     font_path = os.path.join(config.ASSETS_DIR, "Giants-Inline.ttf")
     if os.path.exists(font_path):
-        QFontDatabase.addApplicationFont(font_path)
+        font_id = QFontDatabase.addApplicationFont(font_path)
+        if font_id != -1:
+            families = QFontDatabase.applicationFontFamilies(font_id)
+            if families:
+                config.FONT_MAIN = families[0]  # Use Qt-registered name (critical on macOS)
+        # else: font failed to load (path/permissions); keep config.FONT_MAIN fallback
 
     window = MainWindow()
     mode_controller = ModeController(initial_mode="PPT")

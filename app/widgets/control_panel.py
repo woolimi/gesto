@@ -97,9 +97,8 @@ class CenteredMenuAction(QWidgetAction):
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # 중요: 라벨이 마우스 클릭을 막지 않도록 투명화 (위젯이 이벤트를 대신 받음)
         self.label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.label.setStyleSheet(f"""
+        self.label.setStyleSheet("""
             color: white;
-            font-family: '{config.FONT_MAIN}';
             font-size: 20px;
             font-weight: 800;
             background: transparent;
@@ -164,7 +163,7 @@ class SensitivityPopover(QWidget):
         container_layout.setSpacing(int(10*s))
         
         self.label = QLabel(f"감도: {initial_value}%")
-        self.label.setStyleSheet(f"color: white; font-weight: bold; font-size: {int(16*s)}px; border: none; background: transparent; font-family: '{config.FONT_MAIN}', 'Audiowide'; letter-spacing: 1px;")
+        self.label.setStyleSheet(f"color: white; font-weight: bold; font-size: {int(16*s)}px; border: none; background: transparent; letter-spacing: 1px;")
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(self.label)
         
@@ -209,7 +208,6 @@ class SensitivityPopover(QWidget):
                     color: #00FFFF;
                     border: 1px solid rgba(0, 255, 255, 100);
                     border-radius: {int(8*s)}px;
-                    font-family: '{config.FONT_MAIN}';
                     font-weight: bold;
                     font-size: {int(13*s)}px;
                 }}
@@ -233,7 +231,7 @@ class SensitivityPopover(QWidget):
         lbl_low = QLabel("낮음")
         lbl_high = QLabel("높음")
         for lbl in (lbl_low, lbl_high):
-            lbl.setStyleSheet(f"color: rgba(0, 255, 255, 180); font-size: {int(12*s)}px; border: none; font-family: '{config.FONT_MAIN}', 'Michroma'; letter-spacing: 1px; background: transparent;")
+            lbl.setStyleSheet(f"color: rgba(0, 255, 255, 180); font-size: {int(12*s)}px; border: none; letter-spacing: 1px; background: transparent;")
         range_layout.addWidget(lbl_low)
         range_layout.addStretch()
         range_layout.addWidget(lbl_high)
@@ -303,8 +301,9 @@ class ControlPanelWidget(QWidget):
             "padding: 1px 15px;", f"padding: 1px {padding_h}px;"
         ))
         
-        # Menu font scaling
-        view_font = QFont(config.FONT_MAIN, base_font_size)
+        # Menu font scaling (default font)
+        view_font = QFont()
+        view_font.setPixelSize(base_font_size)
         view_font.setWeight(QFont.Weight.Bold)
         self.mode_menu.setFont(view_font)
 
@@ -315,13 +314,12 @@ class ControlPanelWidget(QWidget):
         layout.setContentsMargins(30, 15, 30, 15)
         layout.setSpacing(30)
 
-        self.setStyleSheet(f"""
-            #ControlPanel {{
+        self.setStyleSheet("""
+            #ControlPanel {
                 background-color: rgba(20, 20, 30, 210);
                 border: 1px solid rgba(0, 255, 255, 60);
                 border-radius: 20px;
-                font-family: '{config.FONT_MAIN}', sans-serif;
-            }}
+            }
         """)
 
         # 1. 모드 선택 버튼 (Box Style: Label Left + Icon Right)

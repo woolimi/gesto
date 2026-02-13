@@ -40,23 +40,20 @@ class SettingsDialog(QDialog):
                 color: white;
                 border: 1px solid #00FFFF;
                 border-radius: 10px;
-                font-family: 'Giants Inline', 'Michroma', sans-serif;
             }
-            QLabel { color: #CCCCCC; font-size: 18px; font-family: '{config.FONT_MAIN}', 'Michroma', sans-serif; }
+            QLabel { color: #CCCCCC; font-size: 18px; }
             QComboBox {
                 background-color: rgba(255, 255, 255, 20);
                 color: white;
                 border: 1px solid rgba(0, 255, 255, 50);
                 padding: 5px;
                 border-radius: 5px;
-                font-family: '{config.FONT_MAIN}', 'Michroma', sans-serif;
             }
             QComboBox QAbstractItemView {
                 background-color: #101020;
                 color: white;
                 selection-background-color: #00FFFF;
                 selection-color: black;
-                font-family: '{config.FONT_MAIN}', 'Michroma', sans-serif;
             }
             QPushButton {
                  background-color: rgba(0, 255, 255, 30);
@@ -64,7 +61,6 @@ class SettingsDialog(QDialog):
                  border: 1px solid #00FFFF;
                  padding: 8px;
                  border-radius: 5px;
-                 font-family: 'Giants Inline', 'Audiowide', sans-serif;
                  letter-spacing: 2px;
                  text-transform: uppercase;
              }
@@ -79,7 +75,7 @@ class SettingsDialog(QDialog):
         
         # Header
         header = QLabel("시스템 설정")
-        header.setStyleSheet(f"font-size: 26px; font-weight: bold; color: #00FFFF; font-family: '{config.FONT_MAIN}', 'Audiowide', sans-serif; letter-spacing: 5px;")
+        header.setStyleSheet("font-size: 26px; font-weight: bold; color: #00FFFF; letter-spacing: 5px;")
         layout.addWidget(header)
         
         form_layout = QFormLayout()
@@ -94,7 +90,7 @@ class SettingsDialog(QDialog):
         self.combo_cam.currentIndexChanged.connect(self._on_cam_changed)
         
         res_label = QLabel("해상도 강제 설정:")
-        res_label.setStyleSheet(f"color: #00FFFF; font-weight: bold; margin-top: 10px; font-family: '{config.FONT_MAIN}', sans-serif;")
+        res_label.setStyleSheet("color: #00FFFF; font-weight: bold; margin-top: 10px;")
         layout.addWidget(res_label)
         
         res_grid = QGridLayout()
@@ -114,14 +110,13 @@ class SettingsDialog(QDialog):
             btn.setFixedHeight(50) 
             btn.setStyleSheet("""
                 QPushButton {
-                    font-size: 16px; 
+                    font-size: 16px;
                     padding: 10px;
                     background-color: rgba(255, 255, 255, 15);
                     border: 2px solid rgba(0, 255, 255, 60);
                     border-radius: 8px;
                     color: white;
                     font-weight: bold;
-                    font-family: '{config.FONT_MAIN}', sans-serif;
                 }
                 QPushButton:hover {
                     background-color: rgba(0, 255, 255, 50);
@@ -137,7 +132,7 @@ class SettingsDialog(QDialog):
         # Sensitivity Adjustment
         layout.addSpacing(10)
         sens_label = QLabel("인식 감도 조절:")
-        sens_label.setStyleSheet(f"color: {config.COLOR_PRIMARY}; font-weight: bold; font-family: '{config.FONT_MAIN}';")
+        sens_label.setStyleSheet(f"color: {config.COLOR_PRIMARY}; font-weight: bold;")
         layout.addWidget(sens_label)
         
         sens_container = QHBoxLayout()
@@ -162,7 +157,7 @@ class SettingsDialog(QDialog):
         
         self.lbl_sens_val = QLabel(f"{self.slider_sens.value()}%")
         self.lbl_sens_val.setFixedWidth(50)
-        self.lbl_sens_val.setStyleSheet(f"color: white; font-weight: bold; font-family: '{config.FONT_MAIN}';")
+        self.lbl_sens_val.setStyleSheet("color: white; font-weight: bold;")
         
         self.slider_sens.valueChanged.connect(lambda v: self.lbl_sens_val.setText(f"{v}%"))
         self.slider_sens.valueChanged.connect(lambda v: parent.on_sensitivity_changed(v) if parent else None)
@@ -174,7 +169,7 @@ class SettingsDialog(QDialog):
         layout.addStretch()
         
         btn_close = QPushButton("닫기")
-        btn_close.setStyleSheet(f"font-family: '{config.FONT_MAIN}', sans-serif; font-size: 14px; font-weight: bold;")
+        btn_close.setStyleSheet("font-size: 14px; font-weight: bold;")
         btn_close.clicked.connect(play_ui_click)
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
@@ -376,9 +371,8 @@ class CustomTopBar(QWidget):
         # Centered Gesture Label
         self.gesture_label = QLabel("")
         self.gesture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.gesture_label.setStyleSheet(f"""
+        self.gesture_label.setStyleSheet("""
             color: #FFFF00;
-            font-family: '{config.FONT_MAIN}', sans-serif;
             font-size: 18px;
             font-weight: 800;
             letter-spacing: 2px;
@@ -402,13 +396,12 @@ class CustomTopBar(QWidget):
         
         self.status_text = QLabel("상태: 준비됨")
         # Nudging text down slightly (padding-top) to align its center with the circle's center
-        self.status_text.setStyleSheet(f"""
-            color: #00FFFF; 
-            font-size: 13px; 
-            margin-left: 5px; 
-            font-family: '{config.FONT_MAIN}'; 
-            letter-spacing: 2px; 
-            font-weight: bold; 
+        self.status_text.setStyleSheet("""
+            color: #00FFFF;
+            font-size: 13px;
+            margin-left: 5px;
+            letter-spacing: 2px;
+            font-weight: bold;
             background: transparent;
             padding-top: 3.5px;
         """)
@@ -430,7 +423,7 @@ class CustomTopBar(QWidget):
         aot_layout = QHBoxLayout(self.aot_container)
         aot_layout.setContentsMargins(8, 4, 8, 4)
         self.aot_label = QLabel("고정")
-        self.aot_label.setStyleSheet(f"color: #FF00FF; font-size: 11px; font-weight: bold; font-family: '{config.FONT_MAIN}', sans-serif;")
+        self.aot_label.setStyleSheet("color: #FF00FF; font-size: 11px; font-weight: bold;")
         aot_layout.addWidget(self.aot_label)
         self.aot_container.setStyleSheet("background-color: transparent; border: none;")
         self.aot_container.setVisible(False)
@@ -477,7 +470,6 @@ class CustomTopBar(QWidget):
                 color: {color};
                 background: transparent;
                 border: none;
-                font-family: '{config.FONT_MAIN}', sans-serif;
                 font-weight: bold;
             }}
             QPushButton:hover {{
@@ -729,10 +721,10 @@ class MainWindow(QMainWindow):
             
             # FAST: Use setFont instead of setStyleSheet during resize
             if not is_micro:
-                logo_font = QFont("Ubuntu Sans")
+                logo_font = QFont(config.FONT_MAIN)
                 logo_font.setPixelSize(max(20, int(45 * scale)))
                 logo_font.setBold(True)
-                logo_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 140) 
+                logo_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 140)
                 tb.title_label.setFont(logo_font)
                 
                 status_font = QFont("NanumSquareRound")

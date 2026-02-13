@@ -113,7 +113,7 @@ class GestureDisplayWidget(QWidget):
             padding = int(8 * scale)
             radius = int(8 * scale)
             self.gesture_label.setStyleSheet(
-            f"color: #00FFFF; font-family: '{config.FONT_MAIN}', 'Ubuntu Sans'; "
+            "color: #00FFFF; "
             f"background-color: rgba(10, 20, 30, 230); "
             f"border: 1px solid rgba(0, 255, 255, 80); "
             f"border-radius: {radius}px; padding: {padding}px {padding*2.5}px;"
