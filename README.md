@@ -3,13 +3,13 @@
 </div>
 
 # Gesto
-# Deep Learning-based Hand Gesture Recognition & PC Control System
 
 ## 1. Overview
 
+Deep Learning-based Hand Gesture Recognition & PC Control System
+
 > **Gesto**는 웹캠 하나만으로 사용자의 손동작을 정밀하게 인식하여 일상적인 PC 환경을 제어하는 프레임워크입니다. 신체적 제약이나 요리/작업 중 하드웨어 조작이 어려운 상황에서 손을 대지 않고도 자유로운 인터페이스를 제공하는 것을 목적으로 합니다. 
 
-* **프로젝트명**: Gesto
 * **프로젝트 배경**: 환경적/신체적 제약으로 인한 하드웨어 상호작용(터치, 키보드)의 불가능한 상황 해결 
 * **타겟 사용자**: PPT 발표자, YouTube 시청자, 웹캠 기반 게임 사용자 등 원격 제어가 필요한 모든 사용자 
 * **핵심 기술**: 
