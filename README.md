@@ -6,8 +6,10 @@
 
 ## Overview
 
-Gesto 는 카메라로 손의 제스처를 인식해서 PPT, Youtube 를 제어하는 프로그램입니다. Mediapipe 를 사용하여 손 관절을 판단하고, LSTM 모델을 사용하여 제스처를 인식한 뒤에 PyAutoGUI 를 사용하여 제스처에 맵핑된 키보드 키를 트리거 합니다. 발표를 해야하는데 ppt 리모컨을 깜박하고 가져오지 않았을 때, 과자를 먹으며 유튜브를 보는데 키보드에 손을 대기 싫을 때 사용해보세요.
+- 발표를 해야하는데 ppt 리모컨을 깜박하고 가져오지 않았을 때 있으신가요? 
+- 과자를 먹으며 유튜브를 보는데 키보드에 손을 대기 싫으신가요?
 
+Gesto 는 카메라로 손의 제스처를 인식해서 PPT, Youtube 를 조작할 수 있는 프로그램입니다.
 
 ## How to start
 
@@ -19,7 +21,7 @@ uv run python main.py
 ## Features
 
 * 동작인식 시작: 양 손바닥을 화면에 보여주기
-* 동작인식 종료: 양 주먹을 화면에 모여주기
+* 동작인식 종료: 양 주먹을 화면에 보여주기
 * PPT 모드
 	![ppt 모드](https://images.prismic.io/woolimi/aaUlj8FoBIGEg9yq_ppt-mode.gif?auto=format,compress)
 	- 다음 슬라이드: Swipe Left (왼손은 주먹, 오른손은 왼쪽으로 스와이프)
