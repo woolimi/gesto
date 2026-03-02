@@ -42,8 +42,7 @@ uv run python main.py
 * **AI Model**: LSTM (Long Short-Term Memory) 
 * **Hand Tracking**: MediaPipe Solution 
 * **Language**: Python
-* **Libraries**: NumPy (데이터 저장/경량화), OpenCV, PyQt (GUI) 
-* **Architecture Pattern**: Observer Pattern, Composition Root 
+* **Libraries**: NumPy (데이터 저장/경량화), OpenCV, PyQt (GUI), Pynput
 
 ### Hugginface data 가져오기
 
